@@ -10,53 +10,37 @@
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body class="bg-gray-100 min-h-screen p-6 font-sans text-gray-800">
-
     <div class="simulator-layout max-w-[1400px] mx-auto">
+        <main class="simulator-main">
+            <div class="w-full bg-white p-6 rounded-lg shadow-md" id="controlPanel">
+                <nav class="tab-list" role="tablist" aria-label="HPLC simulator controls">
+                    <button id="tab-analytes" role="tab" type="button" data-tab="analytes" aria-controls="panel-analytes" aria-selected="true" tabindex="0">Analytes</button>
+                    <button id="tab-mobile-phase" role="tab" type="button" data-tab="mobile-phase" aria-controls="panel-mobile-phase" aria-selected="false" tabindex="-1">Mobile phase</button>
+                    <button id="tab-solid-phase" role="tab" type="button" data-tab="solid-phase" aria-controls="panel-solid-phase" aria-selected="false" tabindex="-1">Solid phase</button>
+                    <button id="tab-settings" role="tab" type="button" data-tab="settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Settings (advanced)</button>
+                    <button id="tab-simulation" role="tab" type="button" data-tab="simulation" aria-controls="panel-simulation" aria-selected="false" tabindex="-1">Simulation</button>
+                </nav>
 
-        <!-- Left Panel: Vertical Column -->
-        <div class="column-panel flex flex-col items-center">
-            <!-- Transparent max-height wrapper -->
-            <div class="column-visual relative bg-transparent">
-                <!-- Dynamic active column -->
-                <div id="pixiContainer" class="w-full absolute top-0 left-0 transition-all duration-300 rounded-b-lg border-2 border-t-0 border-gray-400 overflow-hidden shadow-inner" style="height: 50%; border-bottom: 4px solid #ef4444; background-color: #dbeafe;">
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Panel: Controls & Chromatogram -->
-        <div class="min-w-0 flex flex-col gap-6">
-
-            <!-- Controls Panel -->
-            <div class="w-full bg-white p-6 rounded-lg shadow-md flex flex-col gap-6" id="controlPanel">
-
-                <div class="phase-grid grid grid-cols-1 md:grid-cols-2">
-                    <!-- Global Parameters -->
-                    <div class="flex flex-col gap-4">
-                        <section class="parameter-section rounded-lg border">
-                            <h3 class="font-bold text-gray-700 border-b pb-1 mb-3">Stationary Phase</h3>
-                            <div class="control-row">
-                                <label class="block font-semibold text-sm">Stationary Phase</label>
-                                <select id="statPhase" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="1.0">C18 (Standard)</option>
-                                    <option value="0.7">C8 (Reduced ret.)</option>
-                                    <option value="0.4">C4 (Proteins)</option>
-                                    <option value="0.8">Phenyl (Pi-Pi)</option>
-                                </select>
+                <div class="tab-panels">
+                    <section id="panel-analytes" class="tab-panel" role="tabpanel" aria-labelledby="tab-analytes" tabindex="0" data-setup-panel>
+                        <div class="panel-heading">
+                            <div>
+                                <h2 data-ui-label="analytes">Analytes</h2>
+                                <span id="soluteCatalogStatus" data-ui-label="catalogStatus" class="status-text" aria-live="polite">Local compounds available; PubChem lookup optional</span>
                             </div>
+                            <span id="computeStatus" class="status-text" aria-live="polite">Analytical / stochastic CPU</span>
+                        </div>
+                        <div id="soluteContainer" class="solute-list">
+                            <!-- Solute Rows Injected via JS -->
+                        </div>
+                        <button id="addSoluteBtn" class="secondary-button" type="button">+ Add Solute</button>
+                    </section>
 
-                            <div class="control-row mt-3">
-                                <label class="flex justify-between font-semibold text-sm">Length (mm) <input type="number" id="colLengthNum" class="w-16 text-right border rounded px-1" value="150" readonly></label>
-                                <input type="range" id="colLength" min="0" max="6" step="1" value="3" class="w-full mt-2">
-                                <div class="flex justify-between text-xs text-gray-500 px-1">
-                                    <span>30</span><span>50</span><span>100</span><span>150</span><span>200</span><span>250</span><span>300</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="parameter-section rounded-lg border">
-                            <h3 class="font-bold text-gray-700 border-b pb-1 mb-3">Mobile Phase</h3>
+                    <section id="panel-mobile-phase" class="tab-panel" role="tabpanel" aria-labelledby="tab-mobile-phase" tabindex="0" data-setup-panel hidden>
+                        <div class="parameter-section">
+                            <h2>Mobile phase</h2>
                             <div class="control-row">
-                                <label class="block font-semibold text-sm">Solvent System</label>
+                                <label for="solventSystem" class="block font-semibold text-sm">Solvent System</label>
                                 <select id="solventSystem" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
                                     <option value="1.0">Water / ACN</option>
                                     <option value="0.8">Water / MeOH</option>
@@ -64,75 +48,92 @@
                                     <option value="0.6">Water / IPA</option>
                                 </select>
                             </div>
-                            <div class="control-row mt-3">
+                            <div class="control-row">
                                 <label class="flex justify-between font-semibold text-sm">% Organic <input type="number" id="organicNum" class="w-16 text-right border rounded px-1" value="50" min="0" max="100"></label>
-                                <input type="range" id="organic" min="0" max="100" value="50" class="w-full mt-2">
+                                <input type="range" id="organic" aria-label="Organic fraction (%)" min="0" max="100" value="50" class="w-full mt-2">
                             </div>
-                            <div class="control-row mt-3">
-                                <label class="flex justify-between font-semibold text-sm">
-                                    Flow <span class="text-xs font-normal">(mL/min)</span>
-                                    <output id="flowOutput" class="w-16 text-right border rounded px-1 bg-gray-50">0.00</output>
-                                </label>
+                            <div class="control-row">
+                                <label class="flex justify-between font-semibold text-sm">Flow <span class="text-xs font-normal">(mL/min)</span> <output id="flowOutput" class="w-16 text-right border rounded px-1 bg-gray-50">0.00</output></label>
                             </div>
-                            <div class="control-row mt-3">
+                            <div class="control-row">
                                 <label class="flex justify-between font-semibold text-sm">Pressure <span class="text-xs font-normal">(bar)</span> <input type="number" id="pressureNum" class="w-16 text-right border rounded px-1" value="100" min="1" max="400" step="1"></label>
-                                <input type="range" id="pressure" min="1" max="400" step="1" value="100" class="w-full mt-2">
+                                <input type="range" id="pressure" aria-label="Pressure (bar)" min="1" max="400" step="1" value="100" class="w-full mt-2">
                             </div>
-                            <div class="text-xs text-gray-500 mt-3">
-                                <span aria-live="polite" id="physicsStatus"></span>
+                        </div>
+                    </section>
+
+                    <section id="panel-solid-phase" class="tab-panel" role="tabpanel" aria-labelledby="tab-solid-phase" tabindex="0" data-setup-panel hidden>
+                        <div class="parameter-section">
+                            <h2>Solid phase</h2>
+                            <div class="control-row">
+                                <label for="statPhase" class="block font-semibold text-sm">Stationary Phase</label>
+                                <select id="statPhase" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
+                                    <option value="1.0">C18 (Standard)</option>
+                                    <option value="0.7">C8 (Reduced ret.)</option>
+                                    <option value="0.4">C4 (Proteins)</option>
+                                    <option value="0.8">Phenyl (Pi-Pi)</option>
+                                </select>
                             </div>
-                        </section>
-                    </div>
-
-                    <!-- Solutes Setup -->
-                    <div class="flex flex-col gap-2">
-                        <div class="flex justify-between items-end border-b pb-1">
-                            <h3 class="font-bold text-gray-700" data-ui-label="analytes">Analytes</h3>
-                            <select id="simMode" class="p-1 border rounded bg-gray-50 text-xs">
-                                <option value="stochastic" data-ui-label="discrete">Discrete Particles</option>
-                                <option value="continuous" data-ui-label="continuous">Continuous Math</option>
-                            </select>
-                            <span id="computeStatus" class="text-xs text-gray-500" aria-live="polite">Analytical / stochastic CPU</span>
+                            <div class="control-row">
+                                <label class="flex justify-between font-semibold text-sm">Length (mm) <input type="number" id="colLengthNum" class="w-16 text-right border rounded px-1" value="150" readonly></label>
+                                <input type="range" id="colLength" aria-label="Column length" min="0" max="6" step="1" value="3" class="w-full mt-2">
+                                <div class="flex justify-between text-xs text-gray-500 px-1">
+                                    <span>30</span><span>50</span><span>100</span><span>150</span><span>200</span><span>250</span><span>300</span>
+                                </div>
+                            </div>
                         </div>
-                        <span id="soluteCatalogStatus" data-ui-label="catalogStatus" class="text-xs text-gray-500" aria-live="polite">
-                            Local compounds available; PubChem lookup optional
-                        </span>
-                        <div id="soluteContainer" class="flex flex-col gap-3 overflow-y-auto max-h-[220px] pr-2">
-                            <!-- Solute Rows Injected via JS -->
+                    </section>
+
+                    <section id="panel-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" data-setup-panel hidden>
+                        <div class="parameter-section">
+                            <h2>Settings (advanced)</h2>
+                            <div class="control-row">
+                                <label for="simMode" class="block font-semibold text-sm">Simulation mode</label>
+                                <select id="simMode" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
+                                    <option value="stochastic" data-ui-label="discrete">Discrete Particles</option>
+                                    <option value="continuous" data-ui-label="continuous">Continuous Math</option>
+                                </select>
+                            </div>
+                            <div class="control-row">
+                                <label for="simulationSpeedNum" data-ui-label="time" class="block font-semibold text-sm">Simulation speed (×)</label>
+                                <div class="flex flex-wrap items-center gap-2 mt-2">
+                                    <input type="range" id="simulationSpeed" aria-label="Simulation speed" min="0.01" max="2" step="0.01" value="1" class="w-28">
+                                    <input type="number" id="simulationSpeedNum" class="w-16 text-right border rounded px-1" value="1" min="0.01" max="2" step="0.01">
+                                    <span class="font-normal text-gray-500">x</span>
+                                </div>
+                            </div>
                         </div>
-                        <button id="addSoluteBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1 px-4 rounded text-sm mt-2">+ Add Solute</button>
-                    </div>
-                </div>
+                    </section>
 
-                <!-- Execution Controls -->
-                <div class="border-t pt-4 flex flex-wrap gap-2">
-                    <label data-ui-label="time" class="flex items-center gap-2 text-sm font-semibold text-gray-700 px-2">
-                        Time
-                        <input type="range" id="simulationSpeed" min="0.01" max="2" step="0.01" value="1" class="w-28">
-                        <input type="number" id="simulationSpeedNum" class="w-16 text-right border rounded px-1" value="1" min="0.01" max="2" step="0.01">
-                        <span class="font-normal text-gray-500">x</span>
-                    </label>
-                    <button id="injectBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex-1">Inject & Run</button>
-                    <button id="pauseBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded flex-1 hidden">Pause</button>
-                    <button id="flushBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex-1 hidden">Flush Column</button>
+                    <section id="panel-simulation" class="tab-panel" role="tabpanel" aria-labelledby="tab-simulation" tabindex="0" hidden>
+                        <div class="simulation-actions">
+                            <button id="injectBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex-1" type="button">Inject &amp; Run</button>
+                            <button id="pauseBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded flex-1 hidden" type="button">Pause</button>
+                            <button id="flushBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex-1 hidden" type="button">Flush Column</button>
+                        </div>
+                        <div class="simulation-workspace">
+                            <div class="column-panel flex flex-col items-center">
+                                <div class="column-visual relative bg-transparent">
+                                    <div id="pixiContainer" class="w-full absolute top-0 left-0 transition-all duration-300 rounded-b-lg border-2 border-t-0 border-gray-400 overflow-hidden shadow-inner" style="height: 50%; border-bottom: 4px solid #ef4444; background-color: #dbeafe;"></div>
+                                </div>
+                            </div>
+                            <div id="detectorPanel" class="bg-white p-4 rounded-lg shadow-md flex flex-col">
+                                <h2 data-ui-label="detector" class="font-bold mb-2 text-blue-700">Detector Signal</h2>
+                                <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                    <span data-ui-label="xZoom">X zoom</span>
+                                    <input type="range" id="detectorZoom" min="1" max="10" step="0.5" value="1" class="w-40">
+                                    <output id="detectorZoomOutput" class="w-12 text-right">1x</output>
+                                </label>
+                                <div id="detectorScroll" class="flex-1 relative w-full h-full">
+                                    <div id="detectorCanvasShell" class="relative h-full"><canvas id="chromatogram"></canvas></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
+                <p class="physics-status" aria-live="polite">Status: <span id="physicsStatus"></span></p>
             </div>
-
-            <!-- Chromatogram Panel -->
-            <div id="detectorPanel" class="bg-white p-4 rounded-lg shadow-md flex flex-col">
-                <h2 data-ui-label="detector" class="font-bold mb-2 text-blue-700">Detector Signal</h2>
-                <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                    <span data-ui-label="xZoom">X zoom</span>
-                    <input type="range" id="detectorZoom" min="1" max="10" step="0.5" value="1" class="w-40">
-                    <output id="detectorZoomOutput" class="w-12 text-right">1x</output>
-                </label>
-                <div id="detectorScroll" class="flex-1 relative w-full h-full">
-                    <div id="detectorCanvasShell" class="relative h-full">
-                        <canvas id="chromatogram"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </main>
     </div>
 
     <script type="module" src="./app.js"></script>

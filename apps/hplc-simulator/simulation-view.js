@@ -93,6 +93,15 @@ export class SimulationView {
         this.chart.options.scales.x.max = windows * HPLC_CONFIG.detectorWindowMinutes;
     }
 
+    /** Use this function when a hidden simulation panel becomes visible or changes
+     * size; no inputs; depends on app, chart, updateViewport and the current simulation. */
+    resize() {
+        this.app.resize();
+        this.chart.resize();
+        this.updateViewport((this.simulation?.time ?? 0) / 60);
+        this.chart.update('none');
+    }
+
     /** Use this function to release browser graphics resources on page teardown;
      * no inputs; depends on chart, texture and app. */
     destroy() {

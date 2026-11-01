@@ -1,7 +1,7 @@
 # Virtual Lab
 
 Static browser simulations, prepared for GitHub Pages project hosting. The HPLC
-simulation is the active app; its existing layout is retained for later UI work.
+simulation is the active app, with separate setup and simulation tabs.
 
 ## Run and check
 

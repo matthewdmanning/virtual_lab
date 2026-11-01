@@ -17,11 +17,51 @@ export class UIController {
         this.lastPaint = 0;
         this.tick = this.tick.bind(this);
         this.bindElements();
+        this.bindTabs();
         this.attachGlobalEvents();
         this.createSoluteRow(0);
         this.createSoluteRow(1);
         this.bindDetectorZoom();
         this.updateVisuals();
+    }
+
+    /** Use this function to bind click and arrow/Home/End keyboard navigation;
+     * no inputs; depends on tab DOM buttons and selectTab. */
+    bindTabs() {
+        this.tabs = Array.from(document.querySelectorAll('[role="tab"][data-tab]'));
+        this.tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => this.selectTab(tab.dataset.tab));
+            tab.addEventListener('keydown', event => {
+                if (event.altKey || event.ctrlKey || event.metaKey) return;
+                let next;
+                if (event.key === 'ArrowRight') next = (index + 1) % this.tabs.length;
+                else if (event.key === 'ArrowLeft') next = (index - 1 + this.tabs.length) % this.tabs.length;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = this.tabs.length - 1;
+                else return;
+                event.preventDefault();
+                this.selectTab(this.tabs[next].dataset.tab, true);
+            });
+        });
+        this.selectTab(this.tabs.find(tab => tab.getAttribute('aria-selected') === 'true')?.dataset.tab ?? 'analytes');
+    }
+
+    /** Use this function to show a named tab and resize the revealed simulation;
+     * inputs are tab name and optional focus flag; depends on tab DOM and SimulationView.resize. */
+    selectTab(name, focus = false) {
+        const selected = this.tabs.find(tab => tab.dataset.tab === name);
+        if (!selected) throw new RangeError(`Unknown tab: ${name}`);
+        for (const tab of this.tabs) {
+            const active = tab === selected;
+            tab.setAttribute('aria-selected', String(active));
+            tab.tabIndex = active ? 0 : -1;
+            document.getElementById(tab.getAttribute('aria-controls')).hidden = !active;
+        }
+        this.activeTab = name;
+        if (focus) selected.focus();
+        if (name === 'simulation') requestAnimationFrame(() => {
+            if (this.activeTab === 'simulation') this.view.resize();
+        });
     }
 
     bindElements() {
@@ -60,7 +100,10 @@ export class UIController {
         this.sync(this.inputs.simulationSpeedSlider, this.inputs.simulationSpeedNum);
         this.updateDerivedFlow();
 
-        window.addEventListener('resize', () => this.updateVisuals());
+        window.addEventListener('resize', () => {
+            this.updateVisuals();
+            if (this.activeTab === 'simulation') this.view.resize();
+        });
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && this.simulation && !this.simulation.finished && !this.paused) {
                 this.buttons.pause.click();
@@ -112,7 +155,7 @@ export class UIController {
         this.panels.pixiContainer.style.height = `${ratio * 100}%`;
 
         // Trigger WebGL resize safely
-        setTimeout(() => this.view.app.resize(), 50);
+        if (this.activeTab === 'simulation') requestAnimationFrame(() => this.view.resize());
 
         // Adjust solvent color
         const org = parseInt(this.inputs.organicSlider.value);
@@ -276,13 +319,20 @@ export class UIController {
     handleInject() {
         try {
             for (const input of this.panels.control.querySelectorAll('input')) {
-                if (!input.reportValidity()) return;
+                if (!input.checkValidity()) {
+                    const panel = input.closest('[role="tabpanel"]');
+                    if (panel) this.selectTab(panel.id.replace('panel-', ''));
+                    input.reportValidity();
+                    return;
+                }
             }
             const speed = parseFloat(this.inputs.simulationSpeedNum.value);
             if (!Number.isFinite(speed) || speed <= 0 || speed > 2) throw new RangeError('Speed must be between 0 and 2.');
             const solutes = Array.from(this.panels.soluteContainer.querySelectorAll('.solute-row')).map((row, index) => {
                 const custom = row.querySelector('.custom-toggle').checked;
                 if (!custom && row.dataset.compoundName !== row.querySelector('.lookup-box').value.trim()) {
+                    this.selectTab('analytes');
+                    row.querySelector('.lookup-box').focus();
                     throw new Error('Resolve the compound name or select Custom before injecting.');
                 }
                 const color = CONFIG.colors[index];
@@ -351,9 +401,11 @@ export class UIController {
     }
 
     setControlsLocked(locked) {
-        const inputs = this.panels.control.querySelectorAll('input, select, button:not(#pauseBtn):not(#flushBtn)');
+        const inputs = this.panels.control.querySelectorAll(
+            '[data-setup-panel] input, [data-setup-panel] select, [data-setup-panel] button');
         inputs.forEach(input => input.disabled = locked);
-        this.panels.control.classList.toggle('opacity-75', locked);
+        this.panels.control.querySelectorAll('[data-setup-panel]').forEach(panel =>
+            panel.classList.toggle('opacity-75', locked));
     }
 
     toggleButtons(inject, pause, flush) {

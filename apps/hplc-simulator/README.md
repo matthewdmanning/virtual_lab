@@ -6,6 +6,12 @@ snapshots; it does not calculate retention, broadening, or particle transport.
 See the [framework guide](../../framework_parameter_interdependence_guide.md) and
 [glossary](../../glossary.md) for the intended physical pipeline.
 
+The screen has five tabs: Analytes, Mobile phase, Solid phase, Settings (advanced),
+and Simulation. Simulation contains the column and detector with run/pause/flush
+controls. Mode and speed live in Settings. Tabs remain navigable during a run;
+setup fields lock until it finishes or is flushed. Arrow keys, Home, and End move
+between tabs. Invalid setup inputs are revealed before validation feedback.
+
 ## Physical stages
 
 | Framework | Module | Result |
