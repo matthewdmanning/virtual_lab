@@ -1,0 +1,10 @@
+{
+  "name": "virtual-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build-site.mjs"
+  },
+  "engines": { "node": ">=24" }
+}
