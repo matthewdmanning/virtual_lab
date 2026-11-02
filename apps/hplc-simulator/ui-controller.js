@@ -18,6 +18,31 @@ const LSER_SOLUTE_KEYS = Object.freeze([['E', 'E'], ['S', 'S'], ['A', 'A'], ['B'
 /** Owns browser controls and animation scheduling around the DOM-free Simulation.
  * Constructor receives SimulationView; depends on config, physics, Simulation,
  * local compound data, and optional PubChem lookup. */
+/**
+ * Framework pairs whose assumptions are mutually exclusive; the UI greys out the other choice.
+ * Gradient LSS needs k(Φ): HSM column parameters and LSER system constants hold for one mobile-phase
+ * composition. LSS gradient theory assumes a linear isotherm, which Langmuir overload breaks.
+ */
+export const FRAMEWORK_EXCLUSIONS = Object.freeze([
+    { a: ['elutionMode', 'gradient'], b: ['retentionModel', 'hsm'],
+        reason: 'HSM parameters hold for one mobile-phase composition; gradients change it.' },
+    { a: ['elutionMode', 'gradient'], b: ['retentionModel', 'lser'],
+        reason: 'LSER system constants hold for one mobile-phase composition; gradients change it.' },
+    { a: ['elutionMode', 'gradient'], b: ['transportModel', 'langmuir'],
+        reason: 'LSS gradient theory assumes a linear isotherm; Langmuir overload is nonlinear.' }
+]);
+
+/** Use this function to list options to disable, as { id: { option: reason } }, from current select values. */
+export function excludedOptions(values) {
+    const excluded = {};
+    const block = ([id, option], reason) => { (excluded[id] ??= {})[option] = reason; };
+    for (const { a, b, reason } of FRAMEWORK_EXCLUSIONS) {
+        if (values[a[0]] === a[1]) block(b, reason);
+        if (values[b[0]] === b[1]) block(a, reason);
+    }
+    return excluded;
+}
+
 export class UIController {
     constructor(view) {
         this.view = view;
@@ -264,6 +289,15 @@ export class UIController {
             element.hidden = !visible;
             element.querySelectorAll('input, select').forEach(input => input.disabled = !visible || locked);
         });
+        const ids = [...new Set(FRAMEWORK_EXCLUSIONS.flatMap(({ a, b }) => [a[0], b[0]]))];
+        const excluded = excludedOptions(Object.fromEntries(ids.map(id => [id, document.getElementById(id)?.value])));
+        for (const id of ids) {
+            document.getElementById(id)?.querySelectorAll?.('option').forEach(option => {
+                const reason = excluded[id]?.[option.value];
+                option.disabled = Boolean(reason);
+                option.title = reason ?? '';
+            });
+        }
     }
 
     updateDerivedFlow() {

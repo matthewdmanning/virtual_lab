@@ -155,3 +155,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role="tab"]:fo
     .column-visual { width: min(100%, 96px); margin: 0 auto; }
     .simulation-actions button { flex: 1 1 100%; }
 }
+
+select option:disabled {
+    color: #9ca3af;
+}

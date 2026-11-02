@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { UIController } from '../apps/hplc-simulator/ui-controller.js';
+import { excludedOptions, FRAMEWORK_EXCLUSIONS, UIController } from '../apps/hplc-simulator/ui-controller.js';
 import { DEFAULT_COMPOUNDS } from '../apps/hplc-simulator/compounds.js';
 import { HPLC_CONFIG } from '../apps/hplc-simulator/simulator-config.js';
 import { FLOW_MODELS, GRADIENT_SOLVERS, permeabilityOf, calculateExtraColumnVariance, calculateHsmRetention, calculateLserRetention,
@@ -264,4 +264,41 @@ test('every gradient-solver option reaches the gradient engine', () => {
         assert.equal(solute.particleModel.kind, kinds[option]);
         return solute.tr;
     }), 'Gradient retention time');
+});
+
+test('mutually exclusive framework pairs grey out each other and are rejected by the engine', () => {
+    for (const { a, b, reason } of FRAMEWORK_EXCLUSIONS) {
+        assert.ok(optionsOf(a[0]).includes(a[1]) && optionsOf(b[0]).includes(b[1]));
+        assert.equal(excludedOptions({ [a[0]]: a[1] })[b[0]][b[1]], reason);
+        assert.equal(excludedOptions({ [b[0]]: b[1] })[a[0]][a[1]], reason);
+        assert.throws(() => physicsFor({ [a[0]]: a[1], [b[0]]: b[1] }), RangeError);
+    }
+    assert.deepEqual(excludedOptions({ elutionMode: 'isocratic', retentionModel: 'lss', transportModel: 'edm' }), {});
+});
+
+test('applyConditionalFields disables excluded options in the DOM', () => {
+    const selects = {};
+    for (const id of ['elutionMode', 'retentionModel', 'transportModel']) {
+        selects[id] = { value: optionsOf(id)[0],
+            options: optionsOf(id).map(value => ({ value, disabled: false, title: '' })),
+            querySelectorAll() { return this.options; } };
+    }
+    const previous = globalThis.document;
+    globalThis.document = { querySelectorAll: () => [], getElementById: id => selects[id] };
+    try {
+        const ui = Object.create(UIController.prototype);
+        selects.elutionMode.value = 'gradient';
+        ui.applyConditionalFields();
+        const disabled = id => selects[id].options.filter(o => o.disabled).map(o => o.value);
+        assert.deepEqual(disabled('retentionModel'), ['hsm', 'lser']);
+        assert.deepEqual(disabled('transportModel'), ['langmuir']);
+        assert.deepEqual(disabled('elutionMode'), []);
+        selects.elutionMode.value = 'isocratic';
+        selects.transportModel.value = 'langmuir';
+        ui.applyConditionalFields();
+        assert.deepEqual(disabled('elutionMode'), ['gradient']);
+        assert.deepEqual(disabled('retentionModel'), []);
+    } finally {
+        globalThis.document = previous;
+    }
 });

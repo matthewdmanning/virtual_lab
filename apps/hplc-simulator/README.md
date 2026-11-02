@@ -51,6 +51,10 @@ Model equations and assumptions:
   Particles walk with local Φ. Both gradient solvers require LSS retention and EDM transport.
 - **Extra-column:** σt² = (Vinj²/12 + π·r⁴·Lt·F/(24·Dm) + Vcell²/12)/F², per solute.
 
+Mutually exclusive pairs are greyed out in Settings (`FRAMEWORK_EXCLUSIONS`):
+gradient × HSM and gradient × LSER (parameters fixed to one composition); gradient × Langmuir
+(LSS gradient theory assumes a linear isotherm). Gradient × LPM is unimplemented, not exclusive.
+
 No model uses a spatial grid or finite-difference stencil. Particle mode: EDM walks; LPM uses
 two-state LDF switching when exchange is slow per step, otherwise the equivalent walk; gradient
 particles use local Φ; Langmuir particles sample arrival times from the profile.
