@@ -1,0 +1,18 @@
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: system-ui, sans-serif;
+}
+
+main {
+  width: min(960px, calc(100% - 2rem));
+  margin: 0 auto;
+}
+
+#canvas {
+  width: 100%;
+  height: min(70vh, 640px);
+  border: 1px solid #cbd5e1;
+  background: #0f172a;
+}
