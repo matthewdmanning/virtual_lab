@@ -1,5 +1,5 @@
 import { HPLC_CONFIG as CONFIG, UI_LABELS, DEFAULT_SYSTEM } from './simulator-config.js';
-import { calculateHydrodynamics } from './physics-models.js';
+import { calculateHydrodynamics, FLOW_MODELS } from './physics-models.js';
 import { Simulation } from './simulation.js';
 import { DEFAULT_COMPOUNDS } from './compounds.js';
 import { lookupCompound } from './pubchem.js';
@@ -69,6 +69,7 @@ export class UIController {
             statPhase: document.getElementById('statPhase'),
             solventSystem: document.getElementById('solventSystem'),
             simMode: document.getElementById('simMode'),
+            flowModel: document.getElementById('flowModel'),
             colLengthSlider: document.getElementById('colLength'),
             colLengthNum: document.getElementById('colLengthNum'),
             organicSlider: document.getElementById('organic'),
@@ -98,6 +99,7 @@ export class UIController {
         this.sync(this.inputs.organicSlider, this.inputs.organicNum);
         this.sync(this.inputs.pressureSlider, this.inputs.pressureNum);
         this.sync(this.inputs.simulationSpeedSlider, this.inputs.simulationSpeedNum);
+        this.inputs.flowModel.addEventListener('change', () => this.updateVisuals());
         this.updateDerivedFlow();
 
         window.addEventListener('resize', () => {
@@ -174,7 +176,9 @@ export class UIController {
             pressureDrop: parseFloat(this.inputs.pressureNum.value) * 1e5,
             organicFraction: parseFloat(this.inputs.organicNum.value) / 100,
             phaseModifier: parseFloat(this.inputs.statPhase.value),
-            solventModifier: parseFloat(this.inputs.solventSystem.value)
+            solventModifier: parseFloat(this.inputs.solventSystem.value),
+            flowModel: Object.values(FLOW_MODELS)
+                .find(model => model.id === this.inputs.flowModel.value) ?? FLOW_MODELS.kozenyCarman
         };
     }
 

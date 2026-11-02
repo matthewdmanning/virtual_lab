@@ -87,8 +87,32 @@
                     <section id="panel-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" data-setup-panel hidden>
                         <div class="parameter-section">
                             <h2>Settings (advanced)</h2>
-                            <div class="control-row">
-                                <label for="simMode" class="block font-semibold text-sm">Simulation mode</label>
+                            <p class="settings-note">Stages run together as one pipeline; each picks its solver.</p>
+                            <div class="framework-stage control-row">
+                                <label for="flowModel" class="block font-semibold text-sm">Stage 1A · Hydrodynamics (Framework 1)</label>
+                                <select id="flowModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
+                                    <option value="kozeny-carman">Kozeny–Carman</option>
+                                    <option value="simple-darcy">Darcy (constant permeability)</option>
+                                </select>
+                            </div>
+                            <div class="framework-stage control-row">
+                                <span class="block font-semibold text-sm">Stage 1B · Molecular diffusion (Framework 2)</span>
+                                <p class="framework-static">Wilke–Chang</p>
+                            </div>
+                            <div class="framework-stage control-row">
+                                <span class="block font-semibold text-sm">Stage 2A · Retention (Framework 3)</span>
+                                <p class="framework-static">Linear solvent strength (LSS), empirical LogP coefficients</p>
+                            </div>
+                            <div class="framework-stage control-row">
+                                <span class="block font-semibold text-sm">Stage 2B · Band broadening (Framework 5)</span>
+                                <p class="framework-static">Van Deemter</p>
+                            </div>
+                            <div class="framework-stage control-row">
+                                <span class="block font-semibold text-sm">Stage 3 · Continuum transport (Framework 7)</span>
+                                <p class="framework-static">1D advection–dispersion moments</p>
+                            </div>
+                            <div class="framework-stage control-row">
+                                <label for="simMode" class="block font-semibold text-sm">Stage 4 · Detector output</label>
                                 <select id="simMode" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
                                     <option value="stochastic" data-ui-label="discrete">Discrete Particles</option>
                                     <option value="continuous" data-ui-label="continuous">Continuous Math</option>

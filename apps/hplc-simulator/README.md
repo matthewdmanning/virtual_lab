@@ -8,7 +8,9 @@ See the [framework guide](../../framework_parameter_interdependence_guide.md) an
 
 The screen has five tabs: Analytes, Mobile phase, Solid phase, Settings (advanced),
 and Simulation. Simulation contains the column and detector with run/pause/flush
-controls. Mode and speed live in Settings. Tabs remain navigable during a run;
+controls. Settings lists each pipeline stage's solver: a dropdown where
+alternatives exist (Stage 1A flow model, Stage 4 detector mode), static text
+otherwise. Speed also lives in Settings. Tabs remain navigable during a run;
 setup fields lock until it finishes or is flushed. Arrow keys, Home, and End move
 between tabs. Invalid setup inputs are revealed before validation feedback.
 
