@@ -1,4 +1,4 @@
-import { calculateSolutePhysics, gaussianIntensity } from './physics-models.js';
+import { calculateSolutePhysics } from './physics-models.js';
 
 const MAX_ADVANCE_SECONDS = 0.25;
 const MAX_STEPS_PER_ADVANCE = 256;
@@ -53,8 +53,10 @@ function ownSolutes(solutes) {
         ids.add(solute.id);
         const hasLogP = Number.isFinite(solute.logP);
         const hasMeasuredLss = Number.isFinite(solute.logKw) && Number.isFinite(solute.S);
-        if ((!hasLogP && !hasMeasuredLss) || !Number.isFinite(solute.molarVolume) || solute.molarVolume <= 0) {
-            throw new TypeError('Solute needs finite logP or measured logKw/S, plus positive molarVolume.');
+        const hasDescriptors = solute.hsm !== undefined || solute.lser !== undefined;
+        if ((!hasLogP && !hasMeasuredLss && !hasDescriptors) ||
+            !Number.isFinite(solute.molarVolume) || solute.molarVolume <= 0) {
+            throw new TypeError('Solute needs finite logP, measured logKw/S or HSM/LSER descriptors, plus positive molarVolume.');
         }
         if (solute.logKw !== undefined && !Number.isFinite(solute.logKw) ||
             solute.S !== undefined && (!Number.isFinite(solute.S) || solute.S < 0)) {
@@ -92,7 +94,7 @@ class SeededRandom {
 
 /** Use this class to run DOM-free analytical or stochastic HPLC simulations;
  * inputs are SI system/solute configuration and dependencies are the existing
- * calculateSolutePhysics and gaussianIntensity functions. */
+ * calculateSolutePhysics pipeline and its per-solute detector profiles. */
 export class Simulation {
     /** Use this function to initialize SI system/solute inputs and sampling options; depends on the physics pipeline and SeededRandom. */
     constructor({ system, solutes, mode = 'continuous', particleCount = 1000,
@@ -135,9 +137,9 @@ export class Simulation {
         }
         // ponytail: finite 12-sigma stochastic ceiling; expose remainingMass for
         // the vanishing random tail instead of fabricating terminal arrivals.
-        const sigmaPadding = mode === 'stochastic' ? 12 : 6;
-        const rawDuration = Math.max(...this.solutes.map((solute) =>
-            solute.tr + sigmaPadding * solute.sigma));
+        const rawDuration = Math.max(...this.solutes.map((solute) => mode === 'stochastic'
+            ? Math.max(solute.profile.windowEnd, solute.tr + 12 * solute.sigma)
+            : solute.profile.windowEnd));
         this.duration = Math.max(this.detectorIntervalSeconds,
             Math.ceil((rawDuration - EPSILON) / this.detectorIntervalSeconds) *
             this.detectorIntervalSeconds);
@@ -168,6 +170,8 @@ export class Simulation {
         this._active = new Uint8Array(this.particleCount);
         this._particleMass = new Float64Array(this.particleCount);
         this._detectorDelay = new Float64Array(this.particleCount);
+        this._stationary = new Uint8Array(this.particleCount);
+        this._arrival = new Float64Array(this.particleCount);
         this._counts = new Uint32Array(this.solutes.length);
         for (let i = 0; i < this.particleCount; i++) this._counts[i % this.solutes.length]++;
         for (let i = 0; i < this.particleCount; i++) {
@@ -176,10 +180,16 @@ export class Simulation {
             this.soluteIndices[i] = soluteIndex;
             this._active[i] = 1;
             this._particleMass[i] = solute.mass / this._counts[soluteIndex];
-            this._detectorDelay[i] = this.system.extraColumnVariance
-                ? this._random.normal() * Math.sqrt(this.system.extraColumnVariance)
+            const sampled = solute.particleModel.kind === 'sampled';
+            this._detectorDelay[i] = !sampled && solute.extraColumnVariance
+                ? this._random.normal() * Math.sqrt(solute.extraColumnVariance)
                 : 0;
+            this._arrival[i] = sampled ? this._sampleArrival(solute.profile) : Infinity;
         }
+        // Explicit two-state LDF switching only when exchange is slow relative to one step;
+        // otherwise the equivalent LPM plate height drives an ordinary walk.
+        this._explicitKinetics = this.solutes.map((solute) => solute.particleModel.kind === 'lpm' &&
+            solute.particleModel.kEff * (1 + solute.particleModel.k) * this.stepSeconds <= 0.5);
         this._bins = this.solutes.map(() => new Map());
         this._deferredMass = new Float64Array(this.solutes.length);
         this._nextBin = new Uint32Array(this.solutes.length);
@@ -214,19 +224,70 @@ export class Simulation {
         const start = this._physicalSteps * this.stepSeconds;
         for (let i = 0; i < this.particleCount; i++) {
             if (!this._active[i]) continue;
-            const solute = this.solutes[this.soluteIndices[i]];
+            const soluteIndex = this.soluteIndices[i];
+            const solute = this.solutes[soluteIndex];
             const previous = this.positions[i];
-            const proposed = previous + solute.soluteVelocity * this.stepSeconds +
-                this._random.normal() * Math.sqrt(2 * solute.soluteDispersion * this.stepSeconds);
+            const proposed = this._propose(i, solute, soluteIndex, previous, start);
             this.positions[i] = proposed;
             if (proposed < this.system.columnLength) continue;
             const fraction = previous < this.system.columnLength && proposed !== previous
                 ? Math.max(0, Math.min(1, (this.system.columnLength - previous) / (proposed - previous)))
                 : 1;
-            const arrival = start + fraction * this.stepSeconds + this._detectorDelay[i];
+            const arrival = solute.particleModel.kind === 'sampled'
+                ? this._arrival[i]
+                : start + fraction * this.stepSeconds + this._detectorDelay[i];
             this._active[i] = 0;
             this._recordArrival(this.soluteIndices[i], arrival, this._particleMass[i]);
         }
+    }
+
+    /** Use this function to propose one particle's next axial position for its solute's
+     * transport model: walk (EDM), lpm (two-state LDF), gradient (local Φ) or sampled (profile CDF). */
+    _propose(i, solute, soluteIndex, previous, start) {
+        const dt = this.stepSeconds;
+        const model = solute.particleModel;
+        if (model.kind === 'sampled') {
+            return this.system.columnLength * Math.min(1.5, (start + dt) / this._arrival[i]);
+        }
+        if (model.kind === 'gradient') {
+            const tau = start - model.dwellTime - previous / model.u;
+            const k = model.multiplier * 10 ** (model.logKw - model.S * model.program.fraction(tau));
+            return previous + model.u / (1 + k) * dt +
+                this._random.normal() * Math.sqrt(2 * model.dispersion / (1 + k) * dt);
+        }
+        if (this._explicitKinetics[soluteIndex]) {
+            let next = previous;
+            if (!this._stationary[i]) {
+                next += model.u * dt + this._random.normal() * Math.sqrt(2 * model.axialDispersion * dt);
+                if (this._random.next() < -Math.expm1(-model.k * model.kEff * dt)) this._stationary[i] = 1;
+            } else if (this._random.next() < -Math.expm1(-model.kEff * dt)) {
+                this._stationary[i] = 0;
+            }
+            return next;
+        }
+        return previous + solute.soluteVelocity * dt +
+            this._random.normal() * Math.sqrt(2 * solute.soluteDispersion * dt);
+    }
+
+    /** Use this function to draw one detector arrival time from a tabulated profile by inverse CDF. */
+    _sampleArrival(profile) {
+        if (!profile.cdf) {
+            const cdf = new Float64Array(profile.values.length);
+            for (let j = 1; j < cdf.length; j++) {
+                cdf[j] = cdf[j - 1] + (profile.values[j - 1] + profile.values[j]) / 2 * profile.step;
+            }
+            profile.cdf = cdf;
+        }
+        const cdf = profile.cdf;
+        const target = this._random.next() * cdf[cdf.length - 1];
+        let low = 0;
+        let high = cdf.length - 1;
+        while (high - low > 1) {
+            const middle = (low + high) >> 1;
+            if (cdf[middle] < target) low = middle; else high = middle;
+        }
+        const span = cdf[high] - cdf[low];
+        return profile.start + (low + (span > 0 ? (target - cdf[low]) / span : 0)) * profile.step;
     }
 
     /** Use this function to put exited mass into a detector bin; inputs are a
@@ -247,35 +308,36 @@ export class Simulation {
         while (this._nextSampleTime <= target + EPSILON) {
             const sampleTime = this._nextSampleTime;
             this.solutes.forEach((solute, index) => {
-                if (sampleTime >= Math.max(0, solute.tr - 6 * solute.sigma) - EPSILON &&
-                    sampleTime <= Math.min(this.duration, solute.tr + 6 * solute.sigma) + EPSILON) {
-                    const time = Math.abs(sampleTime - solute.tr) < EPSILON ? solute.tr : sampleTime;
+                if (sampleTime >= solute.profile.windowStart - EPSILON &&
+                    sampleTime <= Math.min(this.duration, solute.profile.windowEnd) + EPSILON) {
+                    const apex = solute.profile.apexTime;
+                    const time = Math.abs(sampleTime - apex) < EPSILON ? apex : sampleTime;
                     this._addSample(index, time,
-                        gaussianIntensity(time, solute.tr, solute.sigma, solute.mass));
+                        solute.mass * solute.profile.pdf(time));
                 }
             });
             this._nextSampleTime += this.detectorIntervalSeconds;
         }
         this.solutes.forEach((solute, index) => {
-            const start = Math.max(0, solute.tr - 6 * solute.sigma);
-            const end = Math.min(this.duration, solute.tr + 6 * solute.sigma);
+            const start = solute.profile.windowStart;
+            const end = Math.min(this.duration, solute.profile.windowEnd);
+            const apex = solute.profile.apexTime;
             if (target >= start - EPSILON && !this._windowStartAdded[index]) {
                 this._addSample(index, start,
-                    gaussianIntensity(start, solute.tr, solute.sigma, solute.mass));
+                    solute.mass * solute.profile.pdf(start));
                 this._windowStartAdded[index] = true;
             }
-            if (!this._apexAdded[index] && solute.tr <= target + EPSILON) {
+            if (!this._apexAdded[index] && apex <= target + EPSILON) {
                 // Insert the apex; never replace a grid point that a previous
                 // drain may already have delivered to the caller.
-                const onGrid = Math.abs(solute.tr / this.detectorIntervalSeconds -
-                    Math.round(solute.tr / this.detectorIntervalSeconds)) < EPSILON;
-                if (!onGrid) this._addSample(index, solute.tr,
-                    gaussianIntensity(solute.tr, solute.tr, solute.sigma, solute.mass));
+                const onGrid = Math.abs(apex / this.detectorIntervalSeconds -
+                    Math.round(apex / this.detectorIntervalSeconds)) < EPSILON;
+                if (!onGrid) this._addSample(index, apex, solute.mass * solute.profile.pdf(apex));
                 this._apexAdded[index] = true;
             }
             if (target >= end - EPSILON && !this._windowEndAdded[index]) {
                 this._addSample(index, end,
-                    gaussianIntensity(end, solute.tr, solute.sigma, solute.mass));
+                    solute.mass * solute.profile.pdf(end));
                 this._windowEndAdded[index] = true;
             }
         });

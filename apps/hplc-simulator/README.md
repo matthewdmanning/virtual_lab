@@ -8,22 +8,50 @@ See the [framework guide](../../framework_parameter_interdependence_guide.md) an
 
 The screen has five tabs: Analytes, Mobile phase, Solid phase, Settings (advanced),
 and Simulation. Simulation contains the column and detector with run/pause/flush
-controls. Settings lists each pipeline stage's solver: a dropdown where
-alternatives exist (Stage 1A flow model, Stage 4 detector mode), static text
-otherwise. Speed also lives in Settings. Tabs remain navigable during a run;
+controls. Settings lists each pipeline stage's solver as a dropdown (static text for
+Wilke–Chang, the only diffusion solver); a selection reveals only its parameter fields.
+Gradient program, HSM/LSER column values and solute descriptors live in Mobile phase,
+Solid phase and Analytes. Speed also lives in Settings. Tabs remain navigable during a run;
 setup fields lock until it finishes or is flushed. Arrow keys, Home, and End move
 between tabs. Invalid setup inputs are revealed before validation feedback.
 
 ## Physical stages
 
-| Framework | Module | Result |
+Settings (advanced) selects one solver per stage; all choices reach `calculateSolutePhysics`.
+
+| Framework | Module | Selections |
 | --- | --- | --- |
-| 1: Hydrodynamics | `physics/hydrodynamics.js` | Permeability, Darcy/interstitial velocity, flow, void volume/time, phase ratio |
-| 2: Molecular diffusion | `physics/diffusion.js` | Per-solute Wilke–Chang diffusion |
-| 3: Thermodynamics | `physics/retention.js` | Measured LSS or empirical LogP retention |
-| 5: Kinetics | `physics/kinetics.js` | Per-solute A/B/C and Van Deemter plate height |
-| 7: Transport | `physics/transport.js` | Retention time, plate count, retained drift/dispersion, spatial/temporal widths |
-| 9: Instrument variance | `physics/transport.js` | Optional additive extra-column temporal variance |
+| 1 Hydrodynamics | `physics/hydrodynamics.js` | Kozeny–Carman or constant-permeability Darcy |
+| 2 Diffusion | `physics/diffusion.js` | Wilke–Chang (only solver) |
+| 3/4 Retention | `physics/retention.js` | LSS (LogP or measured logKw/S), HSM, Abraham LSER |
+| 5/6 Broadening | `physics/kinetics.js` | Van Deemter or Knox; both report u_opt, H_min, ν, h |
+| 7 Transport | `physics/pipeline.js`, `physics/profiles.js` | EDM linear (Gaussian), LPM/LDF (spectral), EDM Langmuir (Cole–Hopf) |
+| 8 Gradient | `physics/gradient.js` | Isocratic or linear LSS gradient with dwell |
+| 9 Instrument | `hydrodynamics.js`, `retention.js`, `transport.js` | Compressibility, k(P), extra-column variance |
+
+Model equations and assumptions:
+
+- **Compressibility:** ρ = ρout(1 + χ(P − Pout)), Darcy flow, constant viscosity. Outlet superficial
+  velocity B0(ΔP + χΔP²/2)/(ηL); t0 = εB0((1 + χΔP)³ − 1)/(3χηu²). `u` is the mean L/t0.
+- **HSM:** log(k/kEB) = η'H − σ'S* + β'A + α'B + κ'C. kEB uses the LSS LogP route with
+  ethylbenzene LogP 3.15. **LSER:** log k = c + eE + sS + aA + bB + vV. Both need user descriptors.
+- **k(P):** k₀·exp(−ΔVm·P/RT) at mean column pressure ΔP/2 above the outlet.
+- **Knox:** h = Aν^⅓ + B/ν + Cν. Defaults A = 1, B = 2, C = 0.05 are editable typical values.
+  ν_opt is found numerically; the glossary's √(B/2C) omits the A term.
+- **LPM:** 1/kEff = dp/(6kf) + dp²/(60Dp); kf from Wilson–Geankoplis; Dp = εp·Dm/τ.
+  Axial dispersion excludes the mass-transfer term. G(s) = exp(L(u − √(u² + 4D·g(s)))/(2D)),
+  g(s) = s(1 + k·kEff/(s + kEff)), inverted by FFT. Defaults εp = 0.5, τ = 2 are editable assumptions.
+- **Langmuir EDM:** q' ≈ a(1 − 2bc) reduces the EDM to Burgers' equation; the Cole–Hopf pulse
+  solution gives the profile. Valid while b·c ≪ 1. Amount = sample concentration × injection volume.
+- **Gradient:** RK4 along the band: dz/dt = u/(1+k), dσz²/dt = 2D_L/(1+k) + 2σz²·∂v/∂z, with
+  Φ(z, t) = program(t − tD − z/u). It matches Snyder's no-dwell tR and Poppe's compression
+  G = √((1 + p + p²/3)/(1 + p)²), p = 2.303·b·k0/(1 + k0). The glossary's G formula lacks the square.
+  Gradients require LSS retention and EDM transport.
+- **Extra-column:** σt² = (Vinj²/12 + π·r⁴·Lt·F/(24·Dm) + Vcell²/12)/F², per solute.
+
+No model uses a spatial grid or finite-difference stencil. Particle mode: EDM walks; LPM uses
+two-state LDF switching when exchange is slow per step, otherwise the equivalent walk; gradient
+particles use local Φ; Langmuir particles sample arrival times from the profile.
 
 `physics-models.js` is the public interface; `calculateSolutePhysics` runs the
 coupled stages. There is no fixed plate count, pressure-based retention
@@ -98,18 +126,12 @@ volume. Measured `logKw` and `S` can replace the empirical retention correlation
 through the headless interface without supplying LogP.
 
 Phase/solvent dropdowns retain empirical modifiers; they do not provide measured
-HSM/LSER descriptors. Solvent viscosity, association factor, molar mass,
-temperature and packing constants remain explicit configurable assumptions.
-Frameworks 4/6/8 (HSM/LSER, Knox, gradient/dwell/compression), pressure heating,
-compressibility and nonlinear adsorption are not inferred from these controls.
+HSM/LSER descriptors. No HSM/LSER values are built in; enter published values for your
+column and solutes. Solvent viscosity, association factor, molar mass, temperature and
+packing constants remain explicit configurable assumptions. Viscous heating, lattice
+Boltzmann and the compiled General Rate Model are out of scope.
 
-The [mechanistic notes](../../mechanistic-pde.md) describe future EDM/LPM/GRM
-requirements. The existing finite-difference WebGPU prototype is isolated under
-`experimental/`; `webgpu-harness.js` preserves its root export. It validates SI
-steps and retention coefficients but remains outside the active detector path.
-Its first-order upwind scheme adds numerical broadening and its simple
-boundaries are not a validated mechanistic column solver. No fallback ladder or
-worker/Wasm scaffolding is needed for the current closed-form/particle modes.
+`experimental/` keeps an unused finite-difference WebGPU prototype; no active model uses it.
 
 ## Verification
 
@@ -118,7 +140,8 @@ Source-independent peak measurements and separation metrics are available from
 Analysis accepts scalar values or numeric time/signal arrays; it does not read
 simulation state or browser controls.
 
-Run `npm test` from the repository root. The checks exercise equations, units,
+Run `npm test` from the repository root. The checks exercise every framework's equations,
+every Settings/phase/analyte selection reaching the engine, units,
 physical response to input changes, mass balance, seed/frame/drain invariance,
 particle mean/width agreement, optional network failures, and static artifact
 paths. Adapter tests exercise real browser scheduling/render methods with small

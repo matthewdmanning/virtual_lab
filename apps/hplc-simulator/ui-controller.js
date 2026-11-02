@@ -5,6 +5,16 @@ import { DEFAULT_COMPOUNDS } from './compounds.js';
 import { loadPreloadedCompounds, lookupCompound, mergeCompounds, readSearchedCompounds,
     rememberSearchedCompound } from './pubchem.js';
 
+/** Ids of Settings selectors and model parameter inputs read by getSystemInputs. */
+const MODEL_FIELD_IDS = Object.freeze(['compressibilityModel', 'compressibility', 'retentionModel',
+    'pressureRetentionModel', 'molarVolumeChange', 'dispersionModel', 'knoxA', 'knoxB', 'knoxC',
+    'elutionMode', 'gradientFinal', 'gradientTime', 'dwellVolume', 'transportModel', 'particlePorosity',
+    'tortuosity', 'langmuirB', 'sampleConcentration', 'extraColumnModel', 'tubingDiameter',
+    'tubingLength', 'cellVolume', 'injectionVolume', 'hsmH', 'hsmS', 'hsmA', 'hsmB', 'hsmC',
+    'lserC', 'lserE', 'lserS', 'lserA', 'lserB', 'lserV']);
+const HSM_SOLUTE_KEYS = Object.freeze([['eta', "η'"], ['sigma', "σ'"], ['beta', "β'"], ['alpha', "α'"], ['kappa', "κ'"]]);
+const LSER_SOLUTE_KEYS = Object.freeze([['E', 'E'], ['S', 'S'], ['A', 'A'], ['B', 'B'], ['V', 'V']]);
+
 /** Owns browser controls and animation scheduling around the DOM-free Simulation.
  * Constructor receives SimulationView; depends on config, physics, Simulation,
  * local compound data, and optional PubChem lookup. */
@@ -85,6 +95,7 @@ export class UIController {
             solventSystem: document.getElementById('solventSystem'),
             simMode: document.getElementById('simMode'),
             flowModel: document.getElementById('flowModel'),
+            ...Object.fromEntries(MODEL_FIELD_IDS.map(id => [id, document.getElementById(id)])),
             colLengthSlider: document.getElementById('colLength'),
             colLengthNum: document.getElementById('colLengthNum'),
             organicSlider: document.getElementById('organic'),
@@ -115,6 +126,13 @@ export class UIController {
         this.sync(this.inputs.pressureSlider, this.inputs.pressureNum);
         this.sync(this.inputs.simulationSpeedSlider, this.inputs.simulationSpeedNum);
         this.inputs.flowModel.addEventListener('change', () => this.updateVisuals());
+        for (const id of MODEL_FIELD_IDS) {
+            this.inputs[id].addEventListener('change', () => {
+                this.applyConditionalFields();
+                this.updateVisuals();
+            });
+        }
+        this.applyConditionalFields();
         this.updateDerivedFlow();
 
         window.addEventListener('resize', () => {
@@ -185,7 +203,9 @@ export class UIController {
     /** Use this function to translate UI geometry, pressure, and solvent controls
      * into SI pipeline inputs; depends on HPLC_CONFIG and this.inputs. */
     getSystemInputs() {
-        return {
+        const value = id => this.inputs[id].value;
+        const number = id => parseFloat(this.inputs[id].value);
+        const system = {
             ...DEFAULT_SYSTEM,
             columnLength: parseFloat(this.inputs.colLengthNum.value) / 1000,
             pressureDrop: parseFloat(this.inputs.pressureNum.value) * 1e5,
@@ -193,8 +213,56 @@ export class UIController {
             phaseModifier: parseFloat(this.inputs.statPhase.value),
             solventModifier: parseFloat(this.inputs.solventSystem.value),
             flowModel: Object.values(FLOW_MODELS)
-                .find(model => model.id === this.inputs.flowModel.value) ?? FLOW_MODELS.kozenyCarman
+                .find(model => model.id === this.inputs.flowModel.value) ?? FLOW_MODELS.kozenyCarman,
+            compressibility: value('compressibilityModel') === 'compressible' ? number('compressibility') * 1e-9 : 0,
+            retentionModel: value('retentionModel'),
+            dispersionModel: value('dispersionModel'),
+            transportModel: value('transportModel')
         };
+        if (system.retentionModel === 'hsm') {
+            system.columnHsm = { H: number('hsmH'), S: number('hsmS'), A: number('hsmA'),
+                B: number('hsmB'), C: number('hsmC') };
+        }
+        if (system.retentionModel === 'lser') {
+            system.lserSystem = { c: number('lserC'), e: number('lserE'), s: number('lserS'),
+                a: number('lserA'), b: number('lserB'), v: number('lserV') };
+        }
+        if (value('pressureRetentionModel') === 'on') {
+            system.pressureRetention = { molarVolumeChange: number('molarVolumeChange') * 1e-6 };
+        }
+        if (system.dispersionModel === 'knox') {
+            system.knox = { A: number('knoxA'), B: number('knoxB'), C: number('knoxC') };
+        }
+        if (system.transportModel === 'lpm') {
+            system.lumpedPore = { particlePorosity: number('particlePorosity'), tortuosity: number('tortuosity') };
+        }
+        // UI units: L/mmol = m³/mol, mmol/L = mol/m³, µL → m³, mL → m³, mm → m, min → s.
+        if (system.transportModel === 'langmuir') {
+            system.langmuir = { b: number('langmuirB'), sampleConcentration: number('sampleConcentration'),
+                injectionVolume: number('injectionVolume') * 1e-9 };
+        }
+        if (value('elutionMode') === 'gradient') {
+            system.gradient = { finalFraction: number('gradientFinal') / 100,
+                gradientTime: number('gradientTime') * 60, dwellVolume: number('dwellVolume') * 1e-6 };
+        }
+        if (value('extraColumnModel') === 'calculated') {
+            system.extraColumn = { injectionVolume: number('injectionVolume') * 1e-9,
+                tubingRadius: number('tubingDiameter') / 2 * 1e-3, tubingLength: number('tubingLength') * 1e-3,
+                cellVolume: number('cellVolume') * 1e-9 };
+        }
+        return system;
+    }
+
+    /** Use this function to show only the parameter fields of selected models; hidden fields are
+     * disabled so browser validation skips them. Depends on [data-show-when="id=a|b"] markup. */
+    applyConditionalFields(locked = false) {
+        if (typeof document === 'undefined' || !document.querySelectorAll) return;
+        document.querySelectorAll('[data-show-when]').forEach(element => {
+            const [id, options] = element.dataset.showWhen.split('=');
+            const visible = options.split('|').includes(document.getElementById(id)?.value);
+            element.hidden = !visible;
+            element.querySelectorAll('input, select').forEach(input => input.disabled = !visible || locked);
+        });
     }
 
     updateDerivedFlow() {
@@ -217,6 +285,12 @@ export class UIController {
                 <div class="relative lookup-shell">
                     <input type="text" aria-label="Compound name" autocomplete="off" placeholder="${UI_LABELS.soluteSearchPlaceholder}" class="lookup-box hidden w-full p-1 border rounded text-sm outline-blue-500">
                     <div class="compound-menu hidden" role="listbox"></div>
+                </div>
+                <div class="param-grid" data-show-when="retentionModel=hsm">
+                    ${HSM_SOLUTE_KEYS.map(([key, label]) => `<label class="param-field">HSM ${label} <input type="number" class="hsm-${key} w-16 text-right border rounded px-1" step="any" required></label>`).join('')}
+                </div>
+                <div class="param-grid" data-show-when="retentionModel=lser">
+                    ${LSER_SOLUTE_KEYS.map(([key, label]) => `<label class="param-field">LSER ${label} <input type="number" class="lser-${key} w-16 text-right border rounded px-1" step="any" required></label>`).join('')}
                 </div>
                 <div class="params">
                     <label class="flex justify-between text-xs font-semibold text-gray-600">${UI_LABELS.logP} <input type="number" class="logp-num w-16 text-right border rounded px-1" value="2.0" step="any" required></label>
@@ -246,6 +320,7 @@ export class UIController {
         });
 
         lookup.addEventListener('change', async (e) => this.handleSoluteSearch(e.target, newRow));
+        this.applyConditionalFields(Boolean(this.simulation && !this.simulation.finished));
     }
 
     bindCompoundMenu(row) {
@@ -361,7 +436,12 @@ export class UIController {
                 throw new Error('Resolve the compound name or select Custom before injecting.');
             }
             const color = CONFIG.colors[index];
+            const descriptors = (prefix, keys) => Object.fromEntries(keys.map(([key]) =>
+                [key, parseFloat(row.querySelector(`.${prefix}-${key}`).value)]));
+            const model = this.inputs.retentionModel.value;
             return {
+                ...(model === 'hsm' ? { hsm: descriptors('hsm', HSM_SOLUTE_KEYS) } : {}),
+                ...(model === 'lser' ? { lser: descriptors('lser', LSER_SOLUTE_KEYS) } : {}),
                 id: String(index), name: custom ? `Solute ${String.fromCharCode(65 + index)}` : row.dataset.compoundName,
                 logP: parseFloat(row.querySelector('.logp-num').value),
                 molarVolume: !custom && Number(row.dataset.molarVolume) || CONFIG.defaultMolarVolumeCm3Mol,
@@ -392,7 +472,8 @@ export class UIController {
             this.previousTimestamp = null;
             this.view.reset(this.simulation);
             document.getElementById('physicsStatus').textContent = this.simulation.solutes.map(solute =>
-                `${solute.name}: H ${(solute.H * 1e6).toFixed(1)} µm, N ${Math.round(solute.N)}`).join(' | ');
+                `${solute.name}: tR ${(solute.tr / 60).toFixed(2)} min, H ${(solute.plateHeight * 1e6).toFixed(1)} µm, ` +
+                `N ${Math.round(solute.N)}`).join(' | ');
             this.setControlsLocked(true);
             this.toggleButtons(false, true, true);
             this.buttons.pause.innerText = UI_LABELS.pause;
@@ -444,6 +525,7 @@ export class UIController {
         const inputs = this.panels.control.querySelectorAll(
             '[data-setup-panel] input, [data-setup-panel] select, [data-setup-panel] button');
         inputs.forEach(input => input.disabled = locked);
+        this.applyConditionalFields(locked);
         this.panels.control.querySelectorAll('[data-setup-panel]').forEach(panel =>
             panel.classList.toggle('opacity-75', locked));
     }
