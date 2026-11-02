@@ -89,7 +89,10 @@ ceilings, not browser FPS promises.
 
 Local compound names/LogP estimates allow injection immediately. Remote PubChem
 lookup has a timeout, validates responses, and handles stale searches and missing
-properties. Molecular volume defaults to the labeled/configured 100 cm³/mol
+properties. Each Analytes dropdown merges three sources: built-in compounds,
+the curated PubChem catalog (localStorage, 30-day cache), and remembered name
+searches (localStorage, newest 50). Typing an unlisted name offers
+“Search PubChem”; a found compound joins the dropdown. Molecular volume defaults to the labeled/configured 100 cm³/mol
 estimate when unknown. Custom LogP mode does not reuse an unrelated compound's
 volume. Measured `logKw` and `S` can replace the empirical retention correlation
 through the headless interface without supplying LogP.

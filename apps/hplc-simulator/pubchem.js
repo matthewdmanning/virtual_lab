@@ -14,6 +14,9 @@ const CURATED_CATEGORY_CIDS = [
     5951, 938, 6137, 6287, 5950, 7405, 5962, 6274, 6306
 ];
 const CACHE_KEY = "hplc-pubchem-curated-catalog-v5";
+const SEARCH_CACHE_KEY = "hplc-pubchem-search-cache-v1";
+const SEARCH_CACHE_LIMIT = 50;
+export const SEARCH_CATEGORY = "PubChem Search Results";
 const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_CATALOG_CIDS = CURATED_CATEGORY_CIDS.length;
@@ -95,6 +98,53 @@ export async function lookupCompound(name, fetchImplementation) {
     );
     const property = data?.PropertyTable?.Properties?.[0];
     return compoundFromProperty(property);
+}
+
+/**
+ * Use this function to read compounds found by earlier PubChem name searches.
+ * Inputs: `storage` — optional storage object. Dependencies: `resolveStorage`, `compoundFromCache`.
+ */
+export function readSearchedCompounds(storage) {
+    const store = resolveStorage(storage);
+    if (!store) return [];
+    try {
+        const cached = JSON.parse(store.getItem(SEARCH_CACHE_KEY));
+        return Array.isArray(cached) ? cached.map(compoundFromCache).filter(Boolean)
+            .map(compound => ({ ...compound, category: SEARCH_CATEGORY })) : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Use this function to remember one searched compound, newest first, bounded and deduplicated by name.
+ * Inputs: `compound` — a parsed compound; `storage` — optional storage object.
+ * Returns the remembered compound record. Dependencies: `readSearchedCompounds`, `compoundFromCache`.
+ */
+export function rememberSearchedCompound(compound, storage) {
+    const record = compoundFromCache(compound);
+    if (!record) return null;
+    record.category = SEARCH_CATEGORY;
+    const key = record.name.toLowerCase();
+    const list = [record, ...readSearchedCompounds(storage)
+        .filter(item => item.name.toLowerCase() !== key)].slice(0, SEARCH_CACHE_LIMIT);
+    const store = resolveStorage(storage);
+    try {
+        store?.setItem(SEARCH_CACHE_KEY, JSON.stringify(list));
+    } catch {
+        // Storage can be full or denied; the in-memory catalog still holds the result.
+    }
+    return record;
+}
+
+/** Use this function to merge compound lists, keeping the first record for each case-insensitive name. */
+export function mergeCompounds(...lists) {
+    const merged = new Map();
+    for (const compound of lists.flat()) {
+        const key = compound?.name?.toLowerCase();
+        if (key && !merged.has(key)) merged.set(key, compound);
+    }
+    return [...merged.values()];
 }
 
 /**

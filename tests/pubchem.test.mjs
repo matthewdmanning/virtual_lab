@@ -150,3 +150,26 @@ test("catalog timeout aborts a stalled request and returns local defaults", asyn
     assert.equal(aborted, true);
     assert.deepEqual(compounds, [...DEFAULT_COMPOUNDS]);
 });
+
+test("searched compounds are remembered newest first and merged by name", async () => {
+    const { mergeCompounds, readSearchedCompounds, rememberSearchedCompound, SEARCH_CATEGORY } =
+        await import("../apps/hplc-simulator/pubchem.js");
+    const values = new Map();
+    const storage = {
+        getItem(key) { return values.get(key) ?? null; },
+        setItem(key, value) { values.set(key, value); }
+    };
+    assert.deepEqual(readSearchedCompounds(storage), []);
+    const record = { cid: 3672, name: "Ibuprofen", logP: 3.5, molecularWeight: 206.3, molarVolume: 120 };
+    assert.equal(rememberSearchedCompound(record, storage).category, SEARCH_CATEGORY);
+    rememberSearchedCompound({ ...record, cid: 1, name: "Other" }, storage);
+    rememberSearchedCompound({ ...record, name: "ibuprofen", logP: 3.9 }, storage);
+    const remembered = readSearchedCompounds(storage);
+    assert.deepEqual(remembered.map(compound => compound.name), ["ibuprofen", "Other"]);
+    assert.equal(rememberSearchedCompound({ name: "", logP: 1 }, storage), null);
+    values.set("hplc-pubchem-search-cache-v1", "{broken");
+    assert.deepEqual(readSearchedCompounds(storage), []);
+    const merged = mergeCompounds(remembered, DEFAULT_COMPOUNDS);
+    assert.equal(merged.filter(compound => compound.name.toLowerCase() === "ibuprofen").length, 1);
+    assert.equal(merged.find(compound => compound.name.toLowerCase() === "ibuprofen").logP, 3.9);
+});

@@ -2,7 +2,8 @@ import { HPLC_CONFIG as CONFIG, UI_LABELS, DEFAULT_SYSTEM } from './simulator-co
 import { calculateHydrodynamics, FLOW_MODELS } from './physics-models.js';
 import { Simulation } from './simulation.js';
 import { DEFAULT_COMPOUNDS } from './compounds.js';
-import { lookupCompound } from './pubchem.js';
+import { loadPreloadedCompounds, lookupCompound, mergeCompounds, readSearchedCompounds,
+    rememberSearchedCompound } from './pubchem.js';
 
 /** Owns browser controls and animation scheduling around the DOM-free Simulation.
  * Constructor receives SimulationView; depends on config, physics, Simulation,
@@ -16,6 +17,7 @@ export class UIController {
         this.previousTimestamp = null;
         this.lastPaint = 0;
         this.tick = this.tick.bind(this);
+        this.catalog = mergeCompounds(DEFAULT_COMPOUNDS, readSearchedCompounds());
         this.bindElements();
         this.bindTabs();
         this.attachGlobalEvents();
@@ -23,6 +25,19 @@ export class UIController {
         this.createSoluteRow(1);
         this.bindDetectorZoom();
         this.updateVisuals();
+        this.loadCatalog();
+    }
+
+    /** Use this function to merge the cached/remote PubChem catalog into the compound menu;
+     * no inputs; depends on loadPreloadedCompounds and the search cache. */
+    async loadCatalog() {
+        const status = document.getElementById('soluteCatalogStatus');
+        const remote = await loadPreloadedCompounds({ includeRemote: true });
+        this.catalog = mergeCompounds(remote, DEFAULT_COMPOUNDS, readSearchedCompounds(), this.catalog);
+        const loaded = remote.some(compound => compound.cid !== null);
+        if (status) status.textContent = loaded
+            ? `${this.catalog.length} compounds available; PubChem search optional`
+            : 'Local compounds available; PubChem catalog unavailable';
     }
 
     /** Use this function to bind click and arrow/Home/End keyboard navigation;
@@ -239,7 +254,7 @@ export class UIController {
 
         const renderMatches = () => {
             const query = input.value.trim().toLowerCase();
-            const matches = DEFAULT_COMPOUNDS
+            const matches = this.catalog
                 .filter(compound => !query || compound.name.toLowerCase().includes(query))
                 .slice(0, 60);
             const grouped = new Map();
@@ -269,7 +284,20 @@ export class UIController {
                     menu.appendChild(option);
                 }
             }
-            menu.classList.toggle('hidden', grouped.size === 0);
+            const typed = input.value.trim();
+            if (typed && !this.catalog.some(compound => compound.name.toLowerCase() === query)) {
+                const search = document.createElement('button');
+                search.type = 'button';
+                search.className = 'compound-search block w-full px-3 py-2 text-left text-sm font-semibold text-blue-700 hover:bg-blue-50';
+                search.textContent = `Search PubChem for “${typed}”`;
+                search.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    menu.classList.add('hidden');
+                    this.handleSoluteSearch(input, row);
+                });
+                menu.appendChild(search);
+            }
+            menu.classList.toggle('hidden', menu.childElementCount === 0);
         };
 
         input.addEventListener('focus', renderMatches);
@@ -300,14 +328,16 @@ export class UIController {
         delete row.dataset.compoundName;
         delete row.dataset.molarVolume;
         if (!query) return;
-        const cached = DEFAULT_COMPOUNDS.find(solute => solute.name.toLowerCase() === query.toLowerCase());
+        const cached = this.catalog.find(solute => solute.name.toLowerCase() === query.toLowerCase());
         if (cached) { this.applyCompound(row, cached); return; }
         input.classList.add('animate-pulse');
         try {
             const compound = await lookupCompound(query);
             if (version !== Number(row.dataset.lookupVersion)) return;
             if (!compound) throw new Error(`No compound properties found for “${query}”.`);
-            this.applyCompound(row, compound);
+            const remembered = rememberSearchedCompound(compound) ?? compound;
+            this.catalog = mergeCompounds(this.catalog, [remembered]);
+            this.applyCompound(row, remembered);
             input.style.borderColor = '#16a34a';
             document.getElementById('soluteCatalogStatus').textContent = 'PubChem compound loaded';
         } catch (error) {
