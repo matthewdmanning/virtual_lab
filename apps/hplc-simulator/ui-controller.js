@@ -350,6 +350,28 @@ export class UIController {
         }
     }
 
+    /** Use this function to turn every selected control into Simulation inputs;
+     * depends on solute rows, getSystemInputs, and Simulation. */
+    buildSimulation() {
+        const solutes = Array.from(this.panels.soluteContainer.querySelectorAll('.solute-row')).map((row, index) => {
+            const custom = row.querySelector('.custom-toggle').checked;
+            if (!custom && row.dataset.compoundName !== row.querySelector('.lookup-box').value.trim()) {
+                this.selectTab('analytes');
+                row.querySelector('.lookup-box').focus();
+                throw new Error('Resolve the compound name or select Custom before injecting.');
+            }
+            const color = CONFIG.colors[index];
+            return {
+                id: String(index), name: custom ? `Solute ${String.fromCharCode(65 + index)}` : row.dataset.compoundName,
+                logP: parseFloat(row.querySelector('.logp-num').value),
+                molarVolume: !custom && Number(row.dataset.molarVolume) || CONFIG.defaultMolarVolumeCm3Mol,
+                color, hexColor: parseInt(color.slice(1), 16)
+            };
+        });
+        return new Simulation({ system: this.getSystemInputs(), solutes,
+            mode: this.inputs.simMode.value, particleCount: CONFIG.maxParticles });
+    }
+
     handleInject() {
         try {
             for (const input of this.panels.control.querySelectorAll('input')) {
@@ -362,23 +384,7 @@ export class UIController {
             }
             const speed = parseFloat(this.inputs.simulationSpeedNum.value);
             if (!Number.isFinite(speed) || speed <= 0 || speed > 2) throw new RangeError('Speed must be between 0 and 2.');
-            const solutes = Array.from(this.panels.soluteContainer.querySelectorAll('.solute-row')).map((row, index) => {
-                const custom = row.querySelector('.custom-toggle').checked;
-                if (!custom && row.dataset.compoundName !== row.querySelector('.lookup-box').value.trim()) {
-                    this.selectTab('analytes');
-                    row.querySelector('.lookup-box').focus();
-                    throw new Error('Resolve the compound name or select Custom before injecting.');
-                }
-                const color = CONFIG.colors[index];
-                return {
-                    id: String(index), name: custom ? `Solute ${String.fromCharCode(65 + index)}` : row.dataset.compoundName,
-                    logP: parseFloat(row.querySelector('.logp-num').value),
-                    molarVolume: !custom && Number(row.dataset.molarVolume) || CONFIG.defaultMolarVolumeCm3Mol,
-                    color, hexColor: parseInt(color.slice(1), 16)
-                };
-            });
-            const nextSimulation = new Simulation({ system: this.getSystemInputs(), solutes,
-                mode: this.inputs.simMode.value, particleCount: CONFIG.maxParticles });
+            const nextSimulation = this.buildSimulation();
             cancelAnimationFrame(this.frameId);
             this.simulation = nextSimulation;
             this.speed = speed;
