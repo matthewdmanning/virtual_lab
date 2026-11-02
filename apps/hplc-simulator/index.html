@@ -168,6 +168,13 @@
                                     <option value="isocratic">Isocratic</option>
                                     <option value="gradient">Linear gradient (LSS)</option>
                                 </select>
+                                <div class="control-row" data-show-when="elutionMode=gradient">
+                                    <label for="gradientSolver" class="block text-sm">Gradient solver</label>
+                                    <select id="gradientSolver" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
+                                        <option value="lss-closed-form">LSS closed form (t_R, G)</option>
+                                        <option value="band-integration">Band integration (RK4 ODE)</option>
+                                    </select>
+                                </div>
                                 <p class="settings-note" data-show-when="elutionMode=gradient">Set the gradient program in Mobile phase. Needs LSS retention and EDM transport.</p>
                             </div>
                             <div class="framework-stage control-row">

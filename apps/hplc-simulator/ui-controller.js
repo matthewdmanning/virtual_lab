@@ -8,7 +8,7 @@ import { loadPreloadedCompounds, lookupCompound, mergeCompounds, readSearchedCom
 /** Ids of Settings selectors and model parameter inputs read by getSystemInputs. */
 const MODEL_FIELD_IDS = Object.freeze(['compressibilityModel', 'compressibility', 'retentionModel',
     'pressureRetentionModel', 'molarVolumeChange', 'dispersionModel', 'knoxA', 'knoxB', 'knoxC',
-    'elutionMode', 'gradientFinal', 'gradientTime', 'dwellVolume', 'transportModel', 'particlePorosity',
+    'elutionMode', 'gradientSolver', 'gradientFinal', 'gradientTime', 'dwellVolume', 'transportModel', 'particlePorosity',
     'tortuosity', 'langmuirB', 'sampleConcentration', 'extraColumnModel', 'tubingDiameter',
     'tubingLength', 'cellVolume', 'injectionVolume', 'hsmH', 'hsmS', 'hsmA', 'hsmB', 'hsmC',
     'lserC', 'lserE', 'lserS', 'lserA', 'lserB', 'lserV']);
@@ -243,7 +243,8 @@ export class UIController {
         }
         if (value('elutionMode') === 'gradient') {
             system.gradient = { finalFraction: number('gradientFinal') / 100,
-                gradientTime: number('gradientTime') * 60, dwellVolume: number('dwellVolume') * 1e-6 };
+                gradientTime: number('gradientTime') * 60, dwellVolume: number('dwellVolume') * 1e-6,
+                solver: value('gradientSolver') };
         }
         if (value('extraColumnModel') === 'calculated') {
             system.extraColumn = { injectionVolume: number('injectionVolume') * 1e-9,

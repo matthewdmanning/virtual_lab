@@ -2,9 +2,10 @@ import { calculateHydrodynamics } from './hydrodynamics.js';
 import { calculateModelRetention, lssCoefficients, pressureRetentionFactor } from './retention.js';
 import { calculateLumpedPoreRate, dispersionModel, estimateVanDeemterTerms } from './kinetics.js';
 import { calculateExtraColumnVariance, calculateTransport, gaussianIntensity } from './transport.js';
-import { gradientProgram, integrateGradientElution } from './gradient.js';
+import { closedFormGradientElution, GRADIENT_SOLVERS, gradientProgram, integrateGradientElution } from './gradient.js';
 import { gaussianProfile, langmuirProfile, lumpedPoreProfile } from './profiles.js';
 
+export { GRADIENT_SOLVERS };
 export const TRANSPORT_MODELS = Object.freeze(['edm', 'lpm', 'langmuir']);
 
 /** Use this function to derive the extra-column variance for one solute from system settings. */
@@ -46,20 +47,28 @@ export function calculateSolutePhysics(system, solute) {
         const multiplier = system.pressureRetention ? pressureRetentionFactor({
             molarVolumeChange: system.pressureRetention.molarVolumeChange,
             pressure: meanPressure, temperature: system.temperature }) : 1;
-        const { finalFraction, gradientTime, dwellVolume = 0 } = system.gradient;
+        const { finalFraction, gradientTime, dwellVolume = 0, solver = 'lss-closed-form' } = system.gradient;
+        if (!GRADIENT_SOLVERS.includes(solver)) throw new RangeError(`Unknown gradient solver: ${solver}`);
         const program = gradientProgram({ initialFraction: system.organicFraction, finalFraction, gradientTime });
-        const elution = integrateGradientElution({ columnLength: system.columnLength, u: flow.u,
-            plateHeight: dispersion.plateHeight, logKw, S, retentionMultiplier: multiplier,
-            dwellTime: dwellVolume / flow.flowRate, program, gradientTime,
-            deltaFraction: finalFraction - system.organicFraction });
+        const dwellTime = dwellVolume / flow.flowRate;
+        const deltaFraction = finalFraction - system.organicFraction;
+        const elution = solver === 'band-integration'
+            ? integrateGradientElution({ columnLength: system.columnLength, u: flow.u,
+                plateHeight: dispersion.plateHeight, logKw, S, retentionMultiplier: multiplier,
+                dwellTime, program, gradientTime, deltaFraction })
+            : closedFormGradientElution({ columnLength: system.columnLength, u: flow.u,
+                plateHeight: dispersion.plateHeight, S, deltaFraction, gradientTime, dwellTime,
+                k0: multiplier * 10 ** (logKw - S * system.organicFraction) });
         const moments = calculateTransport({ columnLength: system.columnLength, u: flow.u,
             k: elution.kElution, plateHeight: dispersion.plateHeight });
         const sigma = Math.sqrt(elution.sigma ** 2 + extraVariance);
+        const profile = gaussianProfile(elution.tr, sigma);
         return { ...base, ...moments, k: elution.initialK, kElution: elution.kElution,
-            tr: elution.tr, sigmaColumn: elution.sigma, sigma, gradient: elution,
-            profile: gaussianProfile(elution.tr, sigma),
-            particleModel: { kind: 'gradient', logKw, S, multiplier, program,
-                dwellTime: elution.dwellTime, u: flow.u, dispersion: dispersion.dispersion } };
+            tr: elution.tr, sigmaColumn: elution.sigma, sigma, gradient: { ...elution, solver }, profile,
+            particleModel: solver === 'band-integration'
+                ? { kind: 'gradient', logKw, S, multiplier, program,
+                    dwellTime: elution.dwellTime, u: flow.u, dispersion: dispersion.dispersion }
+                : { kind: 'sampled' } };
     }
 
     const k = calculateModelRetention(retentionSystem, solute);

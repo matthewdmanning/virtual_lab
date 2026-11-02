@@ -5,6 +5,7 @@ import { Simulation } from '../apps/hplc-simulator/simulation.js';
 import { DEFAULT_SYSTEM } from '../apps/hplc-simulator/simulator-config.js';
 
 const SOLUTE = { logP: 2, molarVolume: 150 };
+const BAND = 'band-integration';
 const close = (actual, expected, tolerance = 1e-9) =>
     assert.ok(Math.abs(actual - expected) <= tolerance * Math.abs(expected), `${actual} ≠ ${expected}`);
 const physics = (overrides = {}, solute = SOLUTE) =>
@@ -39,32 +40,53 @@ test('F3/F4/F9: HSM, LSER and pressure retention follow their equations', () => 
     assert.throws(() => physics({ retentionModel: 'hsm', columnHsm: column }), /HSM descriptors are required/);
 });
 
-test('F5/F6: Van Deemter and Knox optima are true minima', () => {
+test('F5/F6: Van Deemter and Knox optima follow glossary §5 and §6', () => {
     const vd = physics();
     close(vd.optimumVelocity, Math.sqrt(vd.B / vd.C));
     close(vd.minimumPlateHeight, vd.A + 2 * Math.sqrt(vd.B * vd.C));
     const knox = physics({ dispersionModel: 'knox' });
     const h = (nu) => Math.cbrt(nu) + 2 / nu + 0.05 * nu;
-    const nuOpt = knox.optimumVelocity * DEFAULT_SYSTEM.particleSize / knox.D_m;
-    assert.ok(h(nuOpt) <= h(nuOpt * 1.01) && h(nuOpt) <= h(nuOpt * 0.99));
+    const nuOpt = Math.sqrt(2 / (2 * 0.05));
+    close(knox.optimumVelocity, nuOpt * knox.D_m / DEFAULT_SYSTEM.particleSize);
     close(knox.minimumPlateHeight, h(nuOpt) * DEFAULT_SYSTEM.particleSize);
     close(knox.reducedPlateHeight, knox.plateHeight / DEFAULT_SYSTEM.particleSize);
 });
 
-test('F8: gradient elution matches isocratic, Snyder and Poppe limits', () => {
+test('F8 closed form: glossary §8 t_R,grad, k̄ and G as written', () => {
+    const steep = { logP: 4, molarVolume: 150 };
+    const gradient = { finalFraction: 1, gradientTime: 600, dwellVolume: 1e-7 };
+    const run = physics({ organicFraction: 0.2, gradient }, steep);
+    const iso = physics({ organicFraction: 0.2 }, steep);
+    const { t0 } = run;
+    const tD = gradient.dwellVolume / run.flowRate;
+    const b = run.gradient.steepness;
+    close(b, run.gradient.steepness);
+    close(run.k, iso.k);
+    close(run.tr, t0 / b * Math.log10(2.303 * b * run.k * (t0 - tD) / t0 + 1) + t0 + tD);
+    close(run.kElution, 1 / (2.303 * b));
+    const p = 2.303 * b * run.k;
+    const G = Math.sqrt((1 + p + p * p / 3) / (1 + p));
+    close(run.gradient.compression, G);
+    close(run.sigma, G * t0 * (1 + run.kElution) / Math.sqrt(DEFAULT_SYSTEM.columnLength / run.plateHeight));
+    const lss = P.lssCoefficients({ ...steep, phaseModifier: DEFAULT_SYSTEM.phaseModifier,
+        solventModifier: DEFAULT_SYSTEM.solventModifier });
+    close(b, lss.S * 0.8 * t0 / 600);
+});
+
+test('F8 band integration: matches isocratic, Snyder and Poppe limits', () => {
     const steep = { logP: 4, molarVolume: 150 };
     const iso = physics({ organicFraction: 0.2 }, steep);
-    const flat = physics({ organicFraction: 0.2, gradient: { finalFraction: 0.2, gradientTime: 100 } }, steep);
+    const flat = physics({ organicFraction: 0.2, gradient: { finalFraction: 0.2, gradientTime: 100, solver: BAND } }, steep);
     close(flat.tr, iso.tr, 1e-6);
     close(flat.sigma, iso.sigma, 1e-6);
-    const run = physics({ organicFraction: 0.2, gradient: { finalFraction: 1, gradientTime: 600 } }, steep);
+    const run = physics({ organicFraction: 0.2, gradient: { finalFraction: 1, gradientTime: 600, solver: BAND } }, steep);
     const b = run.gradient.steepness;
     close(run.tr, P.snyderGradientRetentionTime({ t0: run.t0, k0: run.k, b }), 1e-4);
     const p = 2.303 * b * run.k / (1 + run.k);
     close(run.gradient.compression, Math.sqrt((1 + p + p * p / 3) / (1 + p) ** 2), 5e-3);
-    const dwell = physics({ organicFraction: 0.2, gradient: { finalFraction: 1, gradientTime: 600, dwellVolume: 1e-6 } }, steep);
+    const dwell = physics({ organicFraction: 0.2, gradient: { finalFraction: 1, gradientTime: 600, dwellVolume: 1e-6, solver: BAND } }, steep);
     assert.ok(dwell.tr > run.tr && dwell.tr < run.tr + dwell.gradient.dwellTime);
-    assert.throws(() => physics({ organicFraction: 0, gradient: { finalFraction: 0, gradientTime: 1 } },
+    assert.throws(() => physics({ organicFraction: 0, gradient: { finalFraction: 0, gradientTime: 1, solver: BAND } },
         { logP: 20, molarVolume: 150 }), /does not elute/);
 });
 
@@ -121,6 +143,8 @@ test('every transport model conserves mass and particles agree with the detector
         lpmSlow: { transportModel: 'lpm', lumpedPore: { particlePorosity: 0.02, tortuosity: 50 } },
         langmuir: { transportModel: 'langmuir', langmuir: { b: 0.05, sampleConcentration: 10, injectionVolume: 2e-8 } },
         gradient: { organicFraction: 0.3, gradient: { finalFraction: 0.9, gradientTime: 60, dwellVolume: 2e-7 } },
+        gradientBand: { organicFraction: 0.3, gradient: { finalFraction: 0.9, gradientTime: 60, dwellVolume: 2e-7,
+            solver: BAND } },
         extraColumn: { extraColumn: { injectionVolume: 1e-8, tubingRadius: 6.35e-5, tubingLength: 0.3, cellVolume: 1e-8 } }
     };
     for (const [name, overrides] of Object.entries(cases)) {

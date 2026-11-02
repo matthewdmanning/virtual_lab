@@ -31,22 +31,24 @@ Settings (advanced) selects one solver per stage; all choices reach `calculateSo
 
 Model equations and assumptions:
 
-- **Compressibility:** ρ = ρout(1 + χ(P − Pout)), Darcy flow, constant viscosity. Outlet superficial
+- **Compressibility:** ρ = ρout(1 + χ(P − Pout)), Darcy flow, constant viscosity. B0 = ε × the §1 Kozeny–Carman factor
+  (interstitial basis) or the Darcy B0. Outlet superficial
   velocity B0(ΔP + χΔP²/2)/(ηL); t0 = εB0((1 + χΔP)³ − 1)/(3χηu²). `u` is the mean L/t0.
 - **HSM:** log(k/kEB) = η'H − σ'S* + β'A + α'B + κ'C. kEB uses the LSS LogP route with
   ethylbenzene LogP 3.15. **LSER:** log k = c + eE + sS + aA + bB + vV. Both need user descriptors.
 - **k(P):** k₀·exp(−ΔVm·P/RT) at mean column pressure ΔP/2 above the outlet.
 - **Knox:** h = Aν^⅓ + B/ν + Cν. Defaults A = 1, B = 2, C = 0.05 are editable typical values.
-  ν_opt is found numerically; the glossary's √(B/2C) omits the A term.
+  ν_opt = (B/2C)^½ (glossary §6).
 - **LPM:** 1/kEff = dp/(6kf) + dp²/(60Dp); kf from Wilson–Geankoplis; Dp = εp·Dm/τ.
   Axial dispersion excludes the mass-transfer term. G(s) = exp(L(u − √(u² + 4D·g(s)))/(2D)),
   g(s) = s(1 + k·kEff/(s + kEff)), inverted by FFT. Defaults εp = 0.5, τ = 2 are editable assumptions.
 - **Langmuir EDM:** q' ≈ a(1 − 2bc) reduces the EDM to Burgers' equation; the Cole–Hopf pulse
   solution gives the profile. Valid while b·c ≪ 1. Amount = sample concentration × injection volume.
-- **Gradient:** RK4 along the band: dz/dt = u/(1+k), dσz²/dt = 2D_L/(1+k) + 2σz²·∂v/∂z, with
-  Φ(z, t) = program(t − tD − z/u). It matches Snyder's no-dwell tR and Poppe's compression
-  G = √((1 + p + p²/3)/(1 + p)²), p = 2.303·b·k0/(1 + k0). The glossary's G formula lacks the square.
-  Gradients require LSS retention and EDM transport.
+- **Gradient, LSS closed form (default):** glossary §8 b, k̄, t_R,grad and G as written.
+  σt = G·t0(1 + k̄)/√N (§7 σt = t_R/√N at k̄). Particles sample this Gaussian.
+- **Gradient, band integration:** separate framework, not in the glossary. RK4 along the band:
+  dz/dt = u/(1+k), dσz²/dt = 2D_L/(1+k) + 2σz²·∂v/∂z, Φ(z, t) = program(t − tD − z/u).
+  Particles walk with local Φ. Both gradient solvers require LSS retention and EDM transport.
 - **Extra-column:** σt² = (Vinj²/12 + π·r⁴·Lt·F/(24·Dm) + Vcell²/12)/F², per solute.
 
 No model uses a spatial grid or finite-difference stencil. Particle mode: EDM walks; LPM uses
@@ -62,9 +64,8 @@ Wilke–Chang converts viscosity to cP internally and returns m²/s. PubChem vol
 conversion is Å³/molecule × 0.602214076. Minutes, millimetres, bars, and mL/min
 belong to the UI adapters.
 
-The ε³ Kozeny–Carman expression yields Darcy velocity; dividing by porosity gives
-interstitial velocity. This distinction corrects the glossary's velocity label
-and keeps `Fv = u × area × ε` and `t0 = V0/Fv` consistent.
+Kozeny–Carman yields interstitial velocity u (glossary §1). Darcy yields superficial velocity;
+u = u_Darcy/ε. `Fv = u × area × ε` and `t0 = V0/Fv` hold for both.
 
 ## Headless interface
 

@@ -52,19 +52,6 @@ function requireCoefficients(label, values) {
     }
 }
 
-/** Use this function to minimise a smooth unimodal function of log10(x) by golden-section search. */
-function minimiseLog(f, low = -6, high = 6) {
-    const ratio = (Math.sqrt(5) - 1) / 2;
-    let a = low;
-    let b = high;
-    for (let i = 0; i < 200 && b - a > 1e-12; i++) {
-        const c = b - ratio * (b - a);
-        const d = a + ratio * (b - a);
-        if (f(10 ** c) < f(10 ** d)) b = d; else a = c;
-    }
-    return 10 ** ((a + b) / 2);
-}
-
 /** Use this function to finish a dispersion result with D_L and reduced (Knox) coordinates. */
 function finish({ velocity, plateHeight, axialPlateHeight, optimumVelocity, minimumPlateHeight,
     particleSize, D_m }) {
@@ -111,7 +98,8 @@ export const DISPERSION_MODELS = Object.freeze({
             requireCoefficients('Knox', { A: knox.A, B: knox.B, C: knox.C });
             const h = (nu) => knox.A * Math.cbrt(nu) + knox.B / nu + knox.C * nu;
             const nu = velocity * particleSize / D_m;
-            const nuOpt = knox.B > 0 && (knox.C > 0 || knox.A > 0) ? minimiseLog(h) : undefined;
+            // Glossary §6 Knox framework: ν_opt = (B/2C)^½.
+            const nuOpt = knox.B > 0 && knox.C > 0 ? Math.sqrt(knox.B / (2 * knox.C)) : undefined;
             return finish({ velocity, particleSize, D_m,
                 plateHeight: h(nu) * particleSize,
                 axialPlateHeight: (knox.A * Math.cbrt(nu) + knox.B / nu) * particleSize,

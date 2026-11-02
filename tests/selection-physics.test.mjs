@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { UIController } from '../apps/hplc-simulator/ui-controller.js';
 import { DEFAULT_COMPOUNDS } from '../apps/hplc-simulator/compounds.js';
 import { HPLC_CONFIG } from '../apps/hplc-simulator/simulator-config.js';
-import { FLOW_MODELS, calculateExtraColumnVariance, calculateHsmRetention, calculateLserRetention,
+import { FLOW_MODELS, GRADIENT_SOLVERS, permeabilityOf, calculateExtraColumnVariance, calculateHsmRetention, calculateLserRetention,
     calculateMolecularDiffusion, calculateRetentionFactor, GAS_CONSTANT }
     from '../apps/hplc-simulator/physics-models.js';
 
@@ -102,8 +102,10 @@ test('every flow-model option reaches hydrodynamics physics', () => {
         const { run, solute } = physicsFor({ flowModel: option });
         assert.equal(run.system.flowModel.id, option);
         const { particleSize, porosity, pressureDrop, viscosity, columnLength } = run.system;
-        const permeability = run.system.flowModel.permeability({ particleSize, porosity });
-        close(solute.u, pressureDrop * permeability / (viscosity * columnLength) / porosity, 1e-12);
+        const expression = run.system.flowModel.permeability({ particleSize, porosity });
+        const velocity = pressureDrop * expression / (viscosity * columnLength);
+        // Glossary §1: Kozeny–Carman yields interstitial u; Darcy yields superficial velocity.
+        close(solute.u, option === 'kozeny-carman' ? velocity : velocity / porosity, 1e-12);
         return solute.u;
     }), 'Interstitial velocity');
 });
@@ -115,7 +117,7 @@ test('every compressibility option reaches hydrodynamics physics', () => {
         const chi = option === 'compressible' ? 0.45e-9 : 0;
         if (chi) close(run.system.compressibility, chi); else assert.equal(run.system.compressibility, 0);
         const { particleSize, porosity, pressureDrop, viscosity, columnLength } = run.system;
-        const permeability = run.system.flowModel.permeability({ particleSize, porosity });
+        const permeability = permeabilityOf(run.system.flowModel, particleSize, porosity);
         const area = Math.PI * (run.system.columnDiameter / 2) ** 2;
         close(solute.flowRate, permeability * (pressureDrop + chi * pressureDrop ** 2 / 2) /
             (viscosity * columnLength) * area, 1e-12);
@@ -167,10 +169,9 @@ test('every elution-mode option reaches the gradient engine', () => {
     const [isocratic, gradient] = optionsOf('elutionMode').map(option =>
         physicsFor({ elutionMode: option, organicNum: 30 }));
     assert.equal(isocratic.run.system.gradient, undefined);
-    assert.deepEqual(gradient.run.system.gradient, { finalFraction: 0.95, gradientTime: 600, dwellVolume: 0.5e-6 });
-    assert.equal(gradient.solute.particleModel.kind, 'gradient');
+    assert.deepEqual(gradient.run.system.gradient, { finalFraction: 0.95, gradientTime: 600, dwellVolume: 0.5e-6,
+        solver: 'lss-closed-form' });
     assert.ok(gradient.solute.tr < isocratic.solute.tr);
-    assert.ok(gradient.solute.gradient.compression < 1);
     assert.throws(() => physicsFor({ elutionMode: 'gradient', retentionModel: 'hsm' }), /Gradient elution needs LSS/);
     assert.throws(() => physicsFor({ elutionMode: 'gradient', transportModel: 'lpm' }), /supports the EDM/);
 });
@@ -250,4 +251,17 @@ test('settings use static text only for the single-solver diffusion stage', () =
     const settings = html.slice(html.indexOf('id="panel-settings"'), html.indexOf('id="panel-simulation"'));
     assert.equal([...settings.matchAll(/class="framework-static"/g)].length, 1);
     assert.match(settings, /Wilke–Chang/);
+});
+
+test('every gradient-solver option reaches the gradient engine', () => {
+    const ids = optionsOf('gradientSolver');
+    assert.deepEqual(ids, [...GRADIENT_SOLVERS]);
+    const kinds = { 'lss-closed-form': 'sampled', 'band-integration': 'gradient' };
+    assertDistinct(ids.map(option => {
+        const { run, solute } = physicsFor({ elutionMode: 'gradient', gradientSolver: option, organicNum: 30 });
+        assert.equal(run.system.gradient.solver, option);
+        assert.equal(solute.gradient.solver, option);
+        assert.equal(solute.particleModel.kind, kinds[option]);
+        return solute.tr;
+    }), 'Gradient retention time');
 });

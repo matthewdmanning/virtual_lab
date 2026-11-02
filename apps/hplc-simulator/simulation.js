@@ -269,8 +269,9 @@ export class Simulation {
             this._random.normal() * Math.sqrt(2 * solute.soluteDispersion * dt);
     }
 
-    /** Use this function to draw one detector arrival time from a tabulated profile by inverse CDF. */
+    /** Use this function to draw one detector arrival time: Gaussian directly, tabulated profiles by inverse CDF. */
     _sampleArrival(profile) {
+        if (profile.kind === 'gaussian') return profile.mean + profile.sigma * this._random.normal();
         if (!profile.cdf) {
             const cdf = new Float64Array(profile.values.length);
             for (let j = 1; j < cdf.length; j++) {

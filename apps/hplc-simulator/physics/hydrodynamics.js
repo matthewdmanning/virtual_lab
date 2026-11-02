@@ -1,10 +1,13 @@
 import { requireFinite, requireFiniteOutput, requirePositive } from './validation.js';
 
 // Framework 1: permeability and superficial (Darcy) velocity, in SI units.
+// `velocityBasis` names the velocity each model's expression yields, as the glossary defines it:
+// Kozeny–Carman gives interstitial velocity u; Darcy gives Darcy (superficial) velocity.
 export const FLOW_MODELS = Object.freeze({
     kozenyCarman: Object.freeze({
         id: 'kozeny-carman',
         label: 'Kozeny-Carman',
+        velocityBasis: 'interstitial',
         permeability({ particleSize, porosity }) {
             return (particleSize ** 2 * porosity ** 3) /
                 (180 * (1 - porosity) ** 2);
@@ -13,6 +16,7 @@ export const FLOW_MODELS = Object.freeze({
     simpleDarcy: Object.freeze({
         id: 'simple-darcy',
         label: 'Darcy (constant permeability)',
+        velocityBasis: 'superficial',
         permeability({ particleSize }) {
             return particleSize ** 2 / 180;
         }
@@ -37,20 +41,22 @@ export function calculateSuperficialVelocity({
     if (!flowModel || typeof flowModel.permeability !== 'function') {
         throw new TypeError('A flow permeability model is required.');
     }
-    const permeability = flowModel.permeability({ particleSize, porosity });
-    requireFiniteOutput('Permeability', permeability);
-    if (permeability <= 0) throw new RangeError('Permeability must be positive.');
+    const permeability = permeabilityOf(flowModel, particleSize, porosity);
     const superficialVelocity = pressureDrop * permeability / (viscosity * columnLength);
     requireFiniteOutput('Superficial velocity', superficialVelocity);
     if (superficialVelocity <= 0) throw new RangeError('Superficial velocity must be positive.');
     return superficialVelocity;
 }
 
-/** Use this function to evaluate permeability for one flow model and validated geometry. */
-function permeabilityOf(flowModel, particleSize, porosity) {
+/**
+ * Use this function to evaluate the superficial-basis permeability B0 for one flow model:
+ * an interstitial-basis expression is multiplied by ε so that superficial velocity = B0·ΔP/(ηL).
+ */
+export function permeabilityOf(flowModel, particleSize, porosity) {
     const model = flowModel ?? FLOW_MODELS.kozenyCarman;
     if (typeof model.permeability !== 'function') throw new TypeError('A flow permeability model is required.');
-    const permeability = model.permeability({ particleSize, porosity });
+    const permeability = model.permeability({ particleSize, porosity }) *
+        (model.velocityBasis === 'interstitial' ? porosity : 1);
     requireFiniteOutput('Permeability', permeability);
     if (permeability <= 0) throw new RangeError('Permeability must be positive.');
     return permeability;

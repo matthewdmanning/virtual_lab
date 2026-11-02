@@ -1,6 +1,8 @@
 import { requireFiniteOutput, requirePositive } from './validation.js';
 
-// Framework 8: linear-gradient LSS elution, integrated along the solute band trajectory (an ODE, not a grid).
+// Framework 8: linear-gradient LSS elution. Two solvers:
+// 'lss-closed-form' evaluates the glossary §8 equations; 'band-integration' integrates the band ODE (no grid).
+export const GRADIENT_SOLVERS = Object.freeze(['lss-closed-form', 'band-integration']);
 
 /** Use this function to build the programmed organic fraction Φ(τ) and its slope, τ measured from gradient start. */
 export function gradientProgram({ initialFraction, finalFraction, gradientTime }) {
@@ -71,4 +73,31 @@ export function integrateGradientElution({ columnLength: L, u, plateHeight: H, l
 /** Use this function for the classic no-dwell LSS gradient retention time (Snyder): t0/b·log10(2.303·k0·b + 1) + t0. */
 export function snyderGradientRetentionTime({ t0, k0, b }) {
     return t0 / b * Math.log10(2.303 * k0 * b + 1) + t0;
+}
+
+/**
+ * Use this function for the glossary §8 closed-form LSS gradient framework:
+ * b = S·ΔΦ·t0/tG; k̄ ≈ 1/(2.303·b); t_R = (t0/b)·log10[2.303·b·k0·(t0 − tD)/t0 + 1] + t0 + tD;
+ * G = ((1 + p + p²/3)/(1 + p))^½ with p = 2.303·b·k0.
+ * Band width combines §7 σt = t_R/√N, evaluated isocratically at k̄ (t_R = t0(1 + k̄)), with G.
+ */
+export function closedFormGradientElution({ columnLength: L, u, plateHeight: H, k0, S,
+    deltaFraction, gradientTime, dwellTime = 0 }) {
+    for (const [name, value] of Object.entries({ L, u, H, k0, S, gradientTime })) requirePositive(name, value);
+    if (!Number.isFinite(dwellTime) || dwellTime < 0) throw new RangeError('Dwell time must be non-negative.');
+    if (!Number.isFinite(deltaFraction) || deltaFraction <= 0) {
+        throw new RangeError('The closed-form gradient needs a rising organic fraction.');
+    }
+    const t0 = L / u;
+    const b = S * deltaFraction * t0 / gradientTime;
+    const argument = 2.303 * b * k0 * (t0 - dwellTime) / t0 + 1;
+    if (!(argument > 0)) throw new RangeError('Dwell time is outside the closed-form gradient equation range.');
+    const tr = t0 / b * Math.log10(argument) + t0 + dwellTime;
+    const kElution = 1 / (2.303 * b);
+    const p = 2.303 * b * k0;
+    const compression = Math.sqrt((1 + p + p * p / 3) / (1 + p));
+    const sigma = compression * t0 * (1 + kElution) / Math.sqrt(L / H);
+    const result = { tr, sigma, kElution, compression, steepness: b, initialK: k0, dwellTime };
+    for (const [name, value] of Object.entries(result)) requireFiniteOutput(name, value);
+    return result;
 }
