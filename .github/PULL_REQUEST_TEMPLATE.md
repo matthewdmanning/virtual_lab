@@ -31,14 +31,12 @@ Closes #
 
 ### Affected areas
 
-- [ ] Screens / navigation
-- [ ] Camera
-- [ ] Submission flow
-- [ ] Auth
-- [ ] API
-- [ ] Permissions
-- [ ] Analytics
-- [ ] UX / design
+- [ ] Simulator UI (`ui-controller.js`, `index.html`, styles)
+- [ ] Physics models (`physics/`)
+- [ ] Analysis (`analysis/`)
+- [ ] PubChem / compounds
+- [ ] WebGPU / experimental
+- [ ] Build / Pages site
 - [ ] Tests
 - [ ] CI / tooling
 - [ ] Docs
@@ -59,10 +57,11 @@ If breaking:
 
 What did you run?
 
-- [ ] `npx expo lint`
-- [ ] `npx tsc --noEmit`
+- [ ] `npm run lint`
+- [ ] `npm run format:check`
 - [ ] `npm test`
-- [ ] Manual testing on device/emulator
+- [ ] `npm run build`
+- [ ] Manual testing in a browser
 - [ ] Not applicable
 
 Steps to manually verify:
