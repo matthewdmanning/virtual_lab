@@ -1,257 +1,879 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>High-Performance Liquid Chromatography Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
-    <link rel="stylesheet" href="./styles.css">
-</head>
-<body class="bg-gray-100 min-h-screen p-6 font-sans text-gray-800">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="bg-gray-100 min-h-screen p-6 font-sans text-gray-800">
     <div class="simulator-layout max-w-[1400px] mx-auto">
-        <main class="simulator-main">
-            <div class="w-full bg-white p-6 rounded-lg shadow-md" id="controlPanel">
-                <nav class="tab-list" role="tablist" aria-label="HPLC simulator controls">
-                    <button id="tab-analytes" role="tab" type="button" data-tab="analytes" aria-controls="panel-analytes" aria-selected="true" tabindex="0">Analytes</button>
-                    <button id="tab-mobile-phase" role="tab" type="button" data-tab="mobile-phase" aria-controls="panel-mobile-phase" aria-selected="false" tabindex="-1">Mobile phase</button>
-                    <button id="tab-solid-phase" role="tab" type="button" data-tab="solid-phase" aria-controls="panel-solid-phase" aria-selected="false" tabindex="-1">Solid phase</button>
-                    <button id="tab-settings" role="tab" type="button" data-tab="settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">Settings (advanced)</button>
-                    <button id="tab-simulation" role="tab" type="button" data-tab="simulation" aria-controls="panel-simulation" aria-selected="false" tabindex="-1">Simulation</button>
-                </nav>
+      <main class="simulator-main">
+        <div class="w-full bg-white p-6 rounded-lg shadow-md" id="controlPanel">
+          <nav
+            class="tab-list"
+            role="tablist"
+            aria-label="HPLC simulator controls"
+          >
+            <button
+              id="tab-analytes"
+              role="tab"
+              type="button"
+              data-tab="analytes"
+              aria-controls="panel-analytes"
+              aria-selected="true"
+              tabindex="0"
+            >
+              Analytes
+            </button>
+            <button
+              id="tab-mobile-phase"
+              role="tab"
+              type="button"
+              data-tab="mobile-phase"
+              aria-controls="panel-mobile-phase"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Mobile phase
+            </button>
+            <button
+              id="tab-solid-phase"
+              role="tab"
+              type="button"
+              data-tab="solid-phase"
+              aria-controls="panel-solid-phase"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Solid phase
+            </button>
+            <button
+              id="tab-settings"
+              role="tab"
+              type="button"
+              data-tab="settings"
+              aria-controls="panel-settings"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Settings (advanced)
+            </button>
+            <button
+              id="tab-simulation"
+              role="tab"
+              type="button"
+              data-tab="simulation"
+              aria-controls="panel-simulation"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Simulation
+            </button>
+          </nav>
 
-                <div class="tab-panels">
-                    <section id="panel-analytes" class="tab-panel" role="tabpanel" aria-labelledby="tab-analytes" tabindex="0" data-setup-panel>
-                        <div class="panel-heading">
-                            <div>
-                                <h2 data-ui-label="analytes">Analytes</h2>
-                                <span id="soluteCatalogStatus" data-ui-label="catalogStatus" class="status-text" aria-live="polite">Local compounds available; PubChem lookup optional</span>
-                            </div>
-                            <span id="computeStatus" class="status-text" aria-live="polite">Analytical / stochastic CPU</span>
-                        </div>
-                        <div class="param-grid mb-3">
-                            <label class="param-field">Injection volume (µL) <input type="number" id="injectionVolume" class="w-20 text-right border rounded px-1" value="10" step="any" required min="0"></label>
-                        </div>
-                        <div id="soluteContainer" class="solute-list">
-                            <!-- Solute Rows Injected via JS -->
-                        </div>
-                        <button id="addSoluteBtn" class="secondary-button" type="button">+ Add Solute</button>
-                    </section>
-
-                    <section id="panel-mobile-phase" class="tab-panel" role="tabpanel" aria-labelledby="tab-mobile-phase" tabindex="0" data-setup-panel hidden>
-                        <div class="parameter-section">
-                            <h2>Mobile phase</h2>
-                            <div class="control-row">
-                                <label for="solventSystem" class="block font-semibold text-sm">Solvent System</label>
-                                <select id="solventSystem" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="1.0">Water / ACN</option>
-                                    <option value="0.8">Water / MeOH</option>
-                                    <option value="0.9">Water / THF</option>
-                                    <option value="0.6">Water / IPA</option>
-                                </select>
-                            </div>
-                            <div class="control-row">
-                                <label class="flex justify-between font-semibold text-sm">% Organic <input type="number" id="organicNum" class="w-16 text-right border rounded px-1" value="50" min="0" max="100"></label>
-                                <input type="range" id="organic" aria-label="Organic fraction (%)" min="0" max="100" value="50" class="w-full mt-2">
-                            </div>
-                            <div class="control-row param-grid" data-show-when="elutionMode=gradient">
-                                <span class="block font-semibold text-sm w-full">Gradient program (from % Organic)</span>
-                                <label class="param-field">Final % organic <input type="number" id="gradientFinal" class="w-20 text-right border rounded px-1" value="95" step="any" required min="0" max="100"></label>
-                                <label class="param-field">Gradient time (min) <input type="number" id="gradientTime" class="w-20 text-right border rounded px-1" value="10" step="any" required min="0.01"></label>
-                                <label class="param-field">Dwell volume (mL) <input type="number" id="dwellVolume" class="w-20 text-right border rounded px-1" value="0.5" step="any" required min="0"></label>
-                            </div>
-                            <div class="control-row">
-                                <label class="flex justify-between font-semibold text-sm">Flow <span class="text-xs font-normal">(mL/min)</span> <output id="flowOutput" class="w-16 text-right border rounded px-1 bg-gray-50">0.00</output></label>
-                            </div>
-                            <div class="control-row">
-                                <label class="flex justify-between font-semibold text-sm">Pressure <span class="text-xs font-normal">(bar)</span> <input type="number" id="pressureNum" class="w-16 text-right border rounded px-1" value="100" min="1" max="400" step="1"></label>
-                                <input type="range" id="pressure" aria-label="Pressure (bar)" min="1" max="400" step="1" value="100" class="w-full mt-2">
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="panel-solid-phase" class="tab-panel" role="tabpanel" aria-labelledby="tab-solid-phase" tabindex="0" data-setup-panel hidden>
-                        <div class="parameter-section">
-                            <h2>Solid phase</h2>
-                            <div class="control-row">
-                                <label for="statPhase" class="block font-semibold text-sm">Stationary Phase</label>
-                                <select id="statPhase" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="1.0">C18 (Standard)</option>
-                                    <option value="0.7">C8 (Reduced ret.)</option>
-                                    <option value="0.4">C4 (Proteins)</option>
-                                    <option value="0.8">Phenyl (Pi-Pi)</option>
-                                </select>
-                            </div>
-                            <div class="control-row param-grid" data-show-when="retentionModel=hsm">
-                                <span class="block font-semibold text-sm w-full">HSM column parameters</span>
-                                <label class="param-field">H <input type="number" id="hsmH" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">S* <input type="number" id="hsmS" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">A <input type="number" id="hsmA" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">B <input type="number" id="hsmB" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">C <input type="number" id="hsmC" class="w-20 text-right border rounded px-1" step="any" required></label>
-                            </div>
-                            <div class="control-row param-grid" data-show-when="retentionModel=lser">
-                                <span class="block font-semibold text-sm w-full">LSER system coefficients (this column and mobile phase)</span>
-                                <label class="param-field">c <input type="number" id="lserC" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">e <input type="number" id="lserE" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">s <input type="number" id="lserS" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">a <input type="number" id="lserA" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">b <input type="number" id="lserB" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                <label class="param-field">v <input type="number" id="lserV" class="w-20 text-right border rounded px-1" step="any" required></label>
-                            </div>
-                            <div class="control-row">
-                                <label class="flex justify-between font-semibold text-sm">Length (mm) <input type="number" id="colLengthNum" class="w-16 text-right border rounded px-1" value="150" readonly></label>
-                                <input type="range" id="colLength" aria-label="Column length" min="0" max="6" step="1" value="3" class="w-full mt-2">
-                                <div class="flex justify-between text-xs text-gray-500 px-1">
-                                    <span>30</span><span>50</span><span>100</span><span>150</span><span>200</span><span>250</span><span>300</span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="panel-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" data-setup-panel hidden>
-                        <div class="parameter-section">
-                            <h2>Settings (advanced)</h2>
-                            <p class="settings-note">Stages run together as one pipeline; each picks its solver.</p>
-                            <div class="framework-stage control-row">
-                                <label for="flowModel" class="block font-semibold text-sm">Stage 1A · Hydrodynamics (Framework 1)</label>
-                                <select id="flowModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="kozeny-carman">Kozeny–Carman</option>
-                                    <option value="simple-darcy">Darcy (constant permeability)</option>
-                                </select>
-                                <label for="compressibilityModel" class="block text-sm mt-2">Mobile-phase compressibility (Framework 9)</label>
-                                <select id="compressibilityModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="incompressible">Incompressible</option>
-                                    <option value="compressible">Compressible (linear density)</option>
-                                </select>
-                                <div class="param-grid" data-show-when="compressibilityModel=compressible">
-                                    <label class="param-field">χ (GPa⁻¹; water 25 °C ≈ 0.45) <input type="number" id="compressibility" class="w-20 text-right border rounded px-1" value="0.45" step="any" required min="0"></label>
-                                </div>
-                            </div>
-                            <div class="framework-stage control-row">
-                                <span class="block font-semibold text-sm">Stage 1B · Molecular diffusion (Framework 2)</span>
-                                <p class="framework-static">Wilke–Chang</p>
-                            </div>
-                            <div class="framework-stage control-row">
-                                <label for="retentionModel" class="block font-semibold text-sm">Stage 2A · Retention (Frameworks 3–4)</label>
-                                <select id="retentionModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="lss">Linear solvent strength (LSS), empirical LogP</option>
-                                    <option value="hsm">Hydrophobic subtraction model (HSM)</option>
-                                    <option value="lser">Abraham LSER</option>
-                                </select>
-                                <p class="settings-note" data-show-when="retentionModel=hsm|lser">Enter solute descriptors in Analytes and column values in Solid phase.</p>
-                                <label for="pressureRetentionModel" class="block text-sm mt-2">Pressure-dependent retention (Framework 9)</label>
-                                <select id="pressureRetentionModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="off">Off</option>
-                                    <option value="on">k(P) = k₀·exp(−ΔVm·P/RT), mean column pressure</option>
-                                </select>
-                                <div class="param-grid" data-show-when="pressureRetentionModel=on">
-                                    <label class="param-field">ΔVm (cm³/mol) <input type="number" id="molarVolumeChange" class="w-20 text-right border rounded px-1" step="any" required></label>
-                                </div>
-                            </div>
-                            <div class="framework-stage control-row">
-                                <label for="dispersionModel" class="block font-semibold text-sm">Stage 2B · Band broadening (Frameworks 5–6)</label>
-                                <select id="dispersionModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="van-deemter">Van Deemter</option>
-                                    <option value="knox">Knox (reduced coordinates)</option>
-                                </select>
-                                <div class="param-grid" data-show-when="dispersionModel=knox">
-                                    <label class="param-field">A <input type="number" id="knoxA" class="w-20 text-right border rounded px-1" value="1" step="any" required min="0"></label>
-                                    <label class="param-field">B <input type="number" id="knoxB" class="w-20 text-right border rounded px-1" value="2" step="any" required min="0"></label>
-                                    <label class="param-field">C <input type="number" id="knoxC" class="w-20 text-right border rounded px-1" value="0.05" step="any" required min="0"></label>
-                                </div>
-                            </div>
-                            <div class="framework-stage control-row">
-                                <label for="elutionMode" class="block font-semibold text-sm">Elution program (Framework 8)</label>
-                                <select id="elutionMode" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="isocratic">Isocratic</option>
-                                    <option value="gradient">Linear gradient (LSS)</option>
-                                </select>
-                                <div class="control-row" data-show-when="elutionMode=gradient">
-                                    <label for="gradientSolver" class="block text-sm">Gradient solver</label>
-                                    <select id="gradientSolver" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                        <option value="lss-closed-form">LSS closed form (t_R, G)</option>
-                                        <option value="band-integration">Band integration (RK4 ODE)</option>
-                                    </select>
-                                </div>
-                                <p class="settings-note" data-show-when="elutionMode=gradient">Set the gradient program in Mobile phase. Needs LSS retention and EDM transport.</p>
-                            </div>
-                            <div class="framework-stage control-row">
-                                <label for="transportModel" class="block font-semibold text-sm">Stage 3 · Continuum transport (Framework 7)</label>
-                                <select id="transportModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="edm">Equilibrium dispersive (linear, analytical)</option>
-                                    <option value="lpm">Lumped pore (LDF, spectral)</option>
-                                    <option value="langmuir">Equilibrium dispersive, Langmuir (Cole–Hopf)</option>
-                                </select>
-                                <div class="param-grid" data-show-when="transportModel=lpm">
-                                    <label class="param-field">Intraparticle porosity <input type="number" id="particlePorosity" class="w-20 text-right border rounded px-1" value="0.5" step="any" required min="0.01" max="0.99"></label>
-                                    <label class="param-field">Pore tortuosity <input type="number" id="tortuosity" class="w-20 text-right border rounded px-1" value="2" step="any" required min="1"></label>
-                                </div>
-                                <div class="param-grid" data-show-when="transportModel=langmuir">
-                                    <label class="param-field">Langmuir b (L/mmol) <input type="number" id="langmuirB" class="w-20 text-right border rounded px-1" step="any" required min="0"></label>
-                                    <label class="param-field">Sample conc. (mmol/L) <input type="number" id="sampleConcentration" class="w-20 text-right border rounded px-1" step="any" required min="0"></label>
-                                </div>
-                            </div>
-                            <div class="framework-stage control-row">
-                                <label for="simMode" class="block font-semibold text-sm">Stage 4 · Detector output</label>
-                                <select id="simMode" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="stochastic" data-ui-label="discrete">Discrete Particles</option>
-                                    <option value="continuous" data-ui-label="continuous">Continuous Math</option>
-                                </select>
-                                <label for="extraColumnModel" class="block text-sm mt-2">Extra-column variance (Framework 9)</label>
-                                <select id="extraColumnModel" class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm">
-                                    <option value="none">None (ideal instrument)</option>
-                                    <option value="calculated">Injection + Taylor–Aris tubing + cell</option>
-                                </select>
-                                <div class="param-grid" data-show-when="extraColumnModel=calculated">
-                                    <label class="param-field">Tubing i.d. (mm) <input type="number" id="tubingDiameter" class="w-20 text-right border rounded px-1" value="0.127" step="any" required min="0"></label>
-                                    <label class="param-field">Tubing length (mm) <input type="number" id="tubingLength" class="w-20 text-right border rounded px-1" value="300" step="any" required min="0"></label>
-                                    <label class="param-field">Cell volume (µL) <input type="number" id="cellVolume" class="w-20 text-right border rounded px-1" value="10" step="any" required min="0"></label>
-                                </div>
-                            </div>
-                            <div class="control-row">
-                                <label for="simulationSpeedNum" data-ui-label="time" class="block font-semibold text-sm">Simulation speed (×)</label>
-                                <div class="flex flex-wrap items-center gap-2 mt-2">
-                                    <input type="range" id="simulationSpeed" aria-label="Simulation speed" min="0.01" max="2" step="0.01" value="1" class="w-28">
-                                    <input type="number" id="simulationSpeedNum" class="w-16 text-right border rounded px-1" value="1" min="0.01" max="2" step="0.01">
-                                    <span class="font-normal text-gray-500">x</span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="panel-simulation" class="tab-panel" role="tabpanel" aria-labelledby="tab-simulation" tabindex="0" hidden>
-                        <div class="simulation-actions">
-                            <button id="injectBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex-1" type="button">Inject &amp; Run</button>
-                            <button id="pauseBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded flex-1 hidden" type="button">Pause</button>
-                            <button id="flushBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex-1 hidden" type="button">Flush Column</button>
-                        </div>
-                        <div class="simulation-workspace">
-                            <div class="column-panel flex flex-col items-center">
-                                <div class="column-visual relative bg-transparent">
-                                    <div id="pixiContainer" class="w-full absolute top-0 left-0 transition-all duration-300 rounded-b-lg border-2 border-t-0 border-gray-400 overflow-hidden shadow-inner" style="height: 50%; border-bottom: 4px solid #ef4444; background-color: #dbeafe;"></div>
-                                </div>
-                            </div>
-                            <div id="detectorPanel" class="bg-white p-4 rounded-lg shadow-md flex flex-col">
-                                <h2 data-ui-label="detector" class="font-bold mb-2 text-blue-700">Detector Signal</h2>
-                                <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                                    <span data-ui-label="xZoom">X zoom</span>
-                                    <input type="range" id="detectorZoom" min="1" max="10" step="0.5" value="1" class="w-40">
-                                    <output id="detectorZoomOutput" class="w-12 text-right">1x</output>
-                                </label>
-                                <div id="detectorScroll" class="flex-1 relative w-full h-full">
-                                    <div id="detectorCanvasShell" class="relative h-full"><canvas id="chromatogram"></canvas></div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+          <div class="tab-panels">
+            <section
+              id="panel-analytes"
+              class="tab-panel"
+              role="tabpanel"
+              aria-labelledby="tab-analytes"
+              tabindex="0"
+              data-setup-panel
+            >
+              <div class="panel-heading">
+                <div>
+                  <h2 data-ui-label="analytes">Analytes</h2>
+                  <span
+                    id="soluteCatalogStatus"
+                    data-ui-label="catalogStatus"
+                    class="status-text"
+                    aria-live="polite"
+                    >Local compounds available; PubChem lookup optional</span
+                  >
                 </div>
-                <p class="physics-status" aria-live="polite">Status: <span id="physicsStatus"></span></p>
-            </div>
-        </main>
+                <span id="computeStatus" class="status-text" aria-live="polite"
+                  >Analytical / stochastic CPU</span
+                >
+              </div>
+              <div class="param-grid mb-3">
+                <label class="param-field"
+                  >Injection volume (µL)
+                  <input
+                    type="number"
+                    id="injectionVolume"
+                    class="w-20 text-right border rounded px-1"
+                    value="10"
+                    step="any"
+                    required
+                    min="0"
+                /></label>
+              </div>
+              <div id="soluteContainer" class="solute-list">
+                <!-- Solute Rows Injected via JS -->
+              </div>
+              <button id="addSoluteBtn" class="secondary-button" type="button">
+                + Add Solute
+              </button>
+            </section>
+
+            <section
+              id="panel-mobile-phase"
+              class="tab-panel"
+              role="tabpanel"
+              aria-labelledby="tab-mobile-phase"
+              tabindex="0"
+              data-setup-panel
+              hidden
+            >
+              <div class="parameter-section">
+                <h2>Mobile phase</h2>
+                <div class="control-row">
+                  <label for="solventSystem" class="block font-semibold text-sm"
+                    >Solvent System</label
+                  >
+                  <select
+                    id="solventSystem"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="1.0">Water / ACN</option>
+                    <option value="0.8">Water / MeOH</option>
+                    <option value="0.9">Water / THF</option>
+                    <option value="0.6">Water / IPA</option>
+                  </select>
+                </div>
+                <div class="control-row">
+                  <label class="flex justify-between font-semibold text-sm"
+                    >% Organic
+                    <input
+                      type="number"
+                      id="organicNum"
+                      class="w-16 text-right border rounded px-1"
+                      value="50"
+                      min="0"
+                      max="100"
+                  /></label>
+                  <input
+                    type="range"
+                    id="organic"
+                    aria-label="Organic fraction (%)"
+                    min="0"
+                    max="100"
+                    value="50"
+                    class="w-full mt-2"
+                  />
+                </div>
+                <div
+                  class="control-row param-grid"
+                  data-show-when="elutionMode=gradient"
+                >
+                  <span class="block font-semibold text-sm w-full"
+                    >Gradient program (from % Organic)</span
+                  >
+                  <label class="param-field"
+                    >Final % organic
+                    <input
+                      type="number"
+                      id="gradientFinal"
+                      class="w-20 text-right border rounded px-1"
+                      value="95"
+                      step="any"
+                      required
+                      min="0"
+                      max="100"
+                  /></label>
+                  <label class="param-field"
+                    >Gradient time (min)
+                    <input
+                      type="number"
+                      id="gradientTime"
+                      class="w-20 text-right border rounded px-1"
+                      value="10"
+                      step="any"
+                      required
+                      min="0.01"
+                  /></label>
+                  <label class="param-field"
+                    >Dwell volume (mL)
+                    <input
+                      type="number"
+                      id="dwellVolume"
+                      class="w-20 text-right border rounded px-1"
+                      value="0.5"
+                      step="any"
+                      required
+                      min="0"
+                  /></label>
+                </div>
+                <div class="control-row">
+                  <label class="flex justify-between font-semibold text-sm"
+                    >Flow <span class="text-xs font-normal">(mL/min)</span>
+                    <output
+                      id="flowOutput"
+                      class="w-16 text-right border rounded px-1 bg-gray-50"
+                      >0.00</output
+                    ></label
+                  >
+                </div>
+                <div class="control-row">
+                  <label class="flex justify-between font-semibold text-sm"
+                    >Pressure <span class="text-xs font-normal">(bar)</span>
+                    <input
+                      type="number"
+                      id="pressureNum"
+                      class="w-16 text-right border rounded px-1"
+                      value="100"
+                      min="1"
+                      max="400"
+                      step="1"
+                  /></label>
+                  <input
+                    type="range"
+                    id="pressure"
+                    aria-label="Pressure (bar)"
+                    min="1"
+                    max="400"
+                    step="1"
+                    value="100"
+                    class="w-full mt-2"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section
+              id="panel-solid-phase"
+              class="tab-panel"
+              role="tabpanel"
+              aria-labelledby="tab-solid-phase"
+              tabindex="0"
+              data-setup-panel
+              hidden
+            >
+              <div class="parameter-section">
+                <h2>Solid phase</h2>
+                <div class="control-row">
+                  <label for="statPhase" class="block font-semibold text-sm"
+                    >Stationary Phase</label
+                  >
+                  <select
+                    id="statPhase"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="1.0">C18 (Standard)</option>
+                    <option value="0.7">C8 (Reduced ret.)</option>
+                    <option value="0.4">C4 (Proteins)</option>
+                    <option value="0.8">Phenyl (Pi-Pi)</option>
+                  </select>
+                </div>
+                <div
+                  class="control-row param-grid"
+                  data-show-when="retentionModel=hsm"
+                >
+                  <span class="block font-semibold text-sm w-full"
+                    >HSM column parameters</span
+                  >
+                  <label class="param-field"
+                    >H
+                    <input
+                      type="number"
+                      id="hsmH"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >S*
+                    <input
+                      type="number"
+                      id="hsmS"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >A
+                    <input
+                      type="number"
+                      id="hsmA"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >B
+                    <input
+                      type="number"
+                      id="hsmB"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >C
+                    <input
+                      type="number"
+                      id="hsmC"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                </div>
+                <div
+                  class="control-row param-grid"
+                  data-show-when="retentionModel=lser"
+                >
+                  <span class="block font-semibold text-sm w-full"
+                    >LSER system coefficients (this column and mobile
+                    phase)</span
+                  >
+                  <label class="param-field"
+                    >c
+                    <input
+                      type="number"
+                      id="lserC"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >e
+                    <input
+                      type="number"
+                      id="lserE"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >s
+                    <input
+                      type="number"
+                      id="lserS"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >a
+                    <input
+                      type="number"
+                      id="lserA"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >b
+                    <input
+                      type="number"
+                      id="lserB"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                  <label class="param-field"
+                    >v
+                    <input
+                      type="number"
+                      id="lserV"
+                      class="w-20 text-right border rounded px-1"
+                      step="any"
+                      required
+                  /></label>
+                </div>
+                <div class="control-row">
+                  <label class="flex justify-between font-semibold text-sm"
+                    >Length (mm)
+                    <input
+                      type="number"
+                      id="colLengthNum"
+                      class="w-16 text-right border rounded px-1"
+                      value="150"
+                      readonly
+                  /></label>
+                  <input
+                    type="range"
+                    id="colLength"
+                    aria-label="Column length"
+                    min="0"
+                    max="6"
+                    step="1"
+                    value="3"
+                    class="w-full mt-2"
+                  />
+                  <div class="flex justify-between text-xs text-gray-500 px-1">
+                    <span>30</span><span>50</span><span>100</span
+                    ><span>150</span><span>200</span><span>250</span
+                    ><span>300</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              id="panel-settings"
+              class="tab-panel"
+              role="tabpanel"
+              aria-labelledby="tab-settings"
+              tabindex="0"
+              data-setup-panel
+              hidden
+            >
+              <div class="parameter-section">
+                <h2>Settings (advanced)</h2>
+                <p class="settings-note">
+                  Stages run together as one pipeline; each picks its solver.
+                </p>
+                <div class="framework-stage control-row">
+                  <label for="flowModel" class="block font-semibold text-sm"
+                    >Stage 1A · Hydrodynamics (Framework 1)</label
+                  >
+                  <select
+                    id="flowModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="kozeny-carman">Kozeny–Carman</option>
+                    <option value="simple-darcy">
+                      Darcy (constant permeability)
+                    </option>
+                  </select>
+                  <label for="compressibilityModel" class="block text-sm mt-2"
+                    >Mobile-phase compressibility (Framework 9)</label
+                  >
+                  <select
+                    id="compressibilityModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="incompressible">Incompressible</option>
+                    <option value="compressible">
+                      Compressible (linear density)
+                    </option>
+                  </select>
+                  <div
+                    class="param-grid"
+                    data-show-when="compressibilityModel=compressible"
+                  >
+                    <label class="param-field"
+                      >χ (GPa⁻¹; water 25 °C ≈ 0.45)
+                      <input
+                        type="number"
+                        id="compressibility"
+                        class="w-20 text-right border rounded px-1"
+                        value="0.45"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                  </div>
+                </div>
+                <div class="framework-stage control-row">
+                  <span class="block font-semibold text-sm"
+                    >Stage 1B · Molecular diffusion (Framework 2)</span
+                  >
+                  <p class="framework-static">Wilke–Chang</p>
+                </div>
+                <div class="framework-stage control-row">
+                  <label
+                    for="retentionModel"
+                    class="block font-semibold text-sm"
+                    >Stage 2A · Retention (Frameworks 3–4)</label
+                  >
+                  <select
+                    id="retentionModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="lss">
+                      Linear solvent strength (LSS), empirical LogP
+                    </option>
+                    <option value="hsm">
+                      Hydrophobic subtraction model (HSM)
+                    </option>
+                    <option value="lser">Abraham LSER</option>
+                  </select>
+                  <p
+                    class="settings-note"
+                    data-show-when="retentionModel=hsm|lser"
+                  >
+                    Enter solute descriptors in Analytes and column values in
+                    Solid phase.
+                  </p>
+                  <label for="pressureRetentionModel" class="block text-sm mt-2"
+                    >Pressure-dependent retention (Framework 9)</label
+                  >
+                  <select
+                    id="pressureRetentionModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="off">Off</option>
+                    <option value="on">
+                      k(P) = k₀·exp(−ΔVm·P/RT), mean column pressure
+                    </option>
+                  </select>
+                  <div
+                    class="param-grid"
+                    data-show-when="pressureRetentionModel=on"
+                  >
+                    <label class="param-field"
+                      >ΔVm (cm³/mol)
+                      <input
+                        type="number"
+                        id="molarVolumeChange"
+                        class="w-20 text-right border rounded px-1"
+                        step="any"
+                        required
+                    /></label>
+                  </div>
+                </div>
+                <div class="framework-stage control-row">
+                  <label
+                    for="dispersionModel"
+                    class="block font-semibold text-sm"
+                    >Stage 2B · Band broadening (Frameworks 5–6)</label
+                  >
+                  <select
+                    id="dispersionModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="van-deemter">Van Deemter</option>
+                    <option value="knox">Knox (reduced coordinates)</option>
+                  </select>
+                  <div class="param-grid" data-show-when="dispersionModel=knox">
+                    <label class="param-field"
+                      >A
+                      <input
+                        type="number"
+                        id="knoxA"
+                        class="w-20 text-right border rounded px-1"
+                        value="1"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                    <label class="param-field"
+                      >B
+                      <input
+                        type="number"
+                        id="knoxB"
+                        class="w-20 text-right border rounded px-1"
+                        value="2"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                    <label class="param-field"
+                      >C
+                      <input
+                        type="number"
+                        id="knoxC"
+                        class="w-20 text-right border rounded px-1"
+                        value="0.05"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                  </div>
+                </div>
+                <div class="framework-stage control-row">
+                  <label for="elutionMode" class="block font-semibold text-sm"
+                    >Elution program (Framework 8)</label
+                  >
+                  <select
+                    id="elutionMode"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="isocratic">Isocratic</option>
+                    <option value="gradient">Linear gradient (LSS)</option>
+                  </select>
+                  <div
+                    class="control-row"
+                    data-show-when="elutionMode=gradient"
+                  >
+                    <label for="gradientSolver" class="block text-sm"
+                      >Gradient solver</label
+                    >
+                    <select
+                      id="gradientSolver"
+                      class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                    >
+                      <option value="lss-closed-form">
+                        LSS closed form (t_R, G)
+                      </option>
+                      <option value="band-integration">
+                        Band integration (RK4 ODE)
+                      </option>
+                    </select>
+                  </div>
+                  <p
+                    class="settings-note"
+                    data-show-when="elutionMode=gradient"
+                  >
+                    Set the gradient program in Mobile phase. Needs LSS
+                    retention and EDM transport.
+                  </p>
+                </div>
+                <div class="framework-stage control-row">
+                  <label
+                    for="transportModel"
+                    class="block font-semibold text-sm"
+                    >Stage 3 · Continuum transport (Framework 7)</label
+                  >
+                  <select
+                    id="transportModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="edm">
+                      Equilibrium dispersive (linear, analytical)
+                    </option>
+                    <option value="lpm">Lumped pore (LDF, spectral)</option>
+                    <option value="langmuir">
+                      Equilibrium dispersive, Langmuir (Cole–Hopf)
+                    </option>
+                  </select>
+                  <div class="param-grid" data-show-when="transportModel=lpm">
+                    <label class="param-field"
+                      >Intraparticle porosity
+                      <input
+                        type="number"
+                        id="particlePorosity"
+                        class="w-20 text-right border rounded px-1"
+                        value="0.5"
+                        step="any"
+                        required
+                        min="0.01"
+                        max="0.99"
+                    /></label>
+                    <label class="param-field"
+                      >Pore tortuosity
+                      <input
+                        type="number"
+                        id="tortuosity"
+                        class="w-20 text-right border rounded px-1"
+                        value="2"
+                        step="any"
+                        required
+                        min="1"
+                    /></label>
+                  </div>
+                  <div
+                    class="param-grid"
+                    data-show-when="transportModel=langmuir"
+                  >
+                    <label class="param-field"
+                      >Langmuir b (L/mmol)
+                      <input
+                        type="number"
+                        id="langmuirB"
+                        class="w-20 text-right border rounded px-1"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                    <label class="param-field"
+                      >Sample conc. (mmol/L)
+                      <input
+                        type="number"
+                        id="sampleConcentration"
+                        class="w-20 text-right border rounded px-1"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                  </div>
+                </div>
+                <div class="framework-stage control-row">
+                  <label for="simMode" class="block font-semibold text-sm"
+                    >Stage 4 · Detector output</label
+                  >
+                  <select
+                    id="simMode"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="stochastic" data-ui-label="discrete">
+                      Discrete Particles
+                    </option>
+                    <option value="continuous" data-ui-label="continuous">
+                      Continuous Math
+                    </option>
+                  </select>
+                  <label for="extraColumnModel" class="block text-sm mt-2"
+                    >Extra-column variance (Framework 9)</label
+                  >
+                  <select
+                    id="extraColumnModel"
+                    class="w-full mt-1 p-2 border rounded bg-gray-50 text-sm"
+                  >
+                    <option value="none">None (ideal instrument)</option>
+                    <option value="calculated">
+                      Injection + Taylor–Aris tubing + cell
+                    </option>
+                  </select>
+                  <div
+                    class="param-grid"
+                    data-show-when="extraColumnModel=calculated"
+                  >
+                    <label class="param-field"
+                      >Tubing i.d. (mm)
+                      <input
+                        type="number"
+                        id="tubingDiameter"
+                        class="w-20 text-right border rounded px-1"
+                        value="0.127"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                    <label class="param-field"
+                      >Tubing length (mm)
+                      <input
+                        type="number"
+                        id="tubingLength"
+                        class="w-20 text-right border rounded px-1"
+                        value="300"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                    <label class="param-field"
+                      >Cell volume (µL)
+                      <input
+                        type="number"
+                        id="cellVolume"
+                        class="w-20 text-right border rounded px-1"
+                        value="10"
+                        step="any"
+                        required
+                        min="0"
+                    /></label>
+                  </div>
+                </div>
+                <div class="control-row">
+                  <label
+                    for="simulationSpeedNum"
+                    data-ui-label="time"
+                    class="block font-semibold text-sm"
+                    >Simulation speed (×)</label
+                  >
+                  <div class="flex flex-wrap items-center gap-2 mt-2">
+                    <input
+                      type="range"
+                      id="simulationSpeed"
+                      aria-label="Simulation speed"
+                      min="0.01"
+                      max="2"
+                      step="0.01"
+                      value="1"
+                      class="w-28"
+                    />
+                    <input
+                      type="number"
+                      id="simulationSpeedNum"
+                      class="w-16 text-right border rounded px-1"
+                      value="1"
+                      min="0.01"
+                      max="2"
+                      step="0.01"
+                    />
+                    <span class="font-normal text-gray-500">x</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              id="panel-simulation"
+              class="tab-panel"
+              role="tabpanel"
+              aria-labelledby="tab-simulation"
+              tabindex="0"
+              hidden
+            >
+              <div class="simulation-actions">
+                <button
+                  id="injectBtn"
+                  class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex-1"
+                  type="button"
+                >
+                  Inject &amp; Run
+                </button>
+                <button
+                  id="pauseBtn"
+                  class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded flex-1 hidden"
+                  type="button"
+                >
+                  Pause
+                </button>
+                <button
+                  id="flushBtn"
+                  class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex-1 hidden"
+                  type="button"
+                >
+                  Flush Column
+                </button>
+              </div>
+              <div class="simulation-workspace">
+                <div class="column-panel flex flex-col items-center">
+                  <div class="column-visual relative bg-transparent">
+                    <div
+                      id="pixiContainer"
+                      class="w-full absolute top-0 left-0 transition-all duration-300 rounded-b-lg border-2 border-t-0 border-gray-400 overflow-hidden shadow-inner"
+                      style="
+                        height: 50%;
+                        border-bottom: 4px solid #ef4444;
+                        background-color: #dbeafe;
+                      "
+                    ></div>
+                  </div>
+                </div>
+                <div
+                  id="detectorPanel"
+                  class="bg-white p-4 rounded-lg shadow-md flex flex-col"
+                >
+                  <h2
+                    data-ui-label="detector"
+                    class="font-bold mb-2 text-blue-700"
+                  >
+                    Detector Signal
+                  </h2>
+                  <label
+                    class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"
+                  >
+                    <span data-ui-label="xZoom">X zoom</span>
+                    <input
+                      type="range"
+                      id="detectorZoom"
+                      min="1"
+                      max="10"
+                      step="0.5"
+                      value="1"
+                      class="w-40"
+                    />
+                    <output id="detectorZoomOutput" class="w-12 text-right"
+                      >1x</output
+                    >
+                  </label>
+                  <div
+                    id="detectorScroll"
+                    class="flex-1 relative w-full h-full"
+                  >
+                    <div id="detectorCanvasShell" class="relative h-full">
+                      <canvas id="chromatogram"></canvas>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <p class="physics-status" aria-live="polite">
+            Status: <span id="physicsStatus"></span>
+          </p>
+        </div>
+      </main>
     </div>
 
     <script type="module" src="./app.js"></script>
-</body>
+  </body>
 </html>

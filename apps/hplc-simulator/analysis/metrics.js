@@ -1,4 +1,8 @@
-import { requireFinite, requireFiniteOutput, requirePositive } from '../physics/validation.js';
+import {
+  requireFinite,
+  requireFiniteOutput,
+  requirePositive,
+} from "../physics/validation.js";
 
 /**
  * Use this function to derive dimensionless retention from measured times.
@@ -6,14 +10,14 @@ import { requireFinite, requireFiniteOutput, requirePositive } from '../physics/
  * Dependencies: `requireFinite`, `requirePositive`, and `requireFiniteOutput`.
  */
 export function retentionFactor(retentionTime, voidTime) {
-    requirePositive('Void time', voidTime);
-    requireFinite('Retention time', retentionTime);
-    if (retentionTime < voidTime) {
-        throw new RangeError('Retention time must not precede void time.');
-    }
-    const factor = (retentionTime - voidTime) / voidTime;
-    requireFiniteOutput('Retention factor', factor);
-    return factor;
+  requirePositive("Void time", voidTime);
+  requireFinite("Retention time", retentionTime);
+  if (retentionTime < voidTime) {
+    throw new RangeError("Retention time must not precede void time.");
+  }
+  const factor = (retentionTime - voidTime) / voidTime;
+  requireFiniteOutput("Retention factor", factor);
+  return factor;
 }
 
 /**
@@ -22,11 +26,11 @@ export function retentionFactor(retentionTime, voidTime) {
  * Dependencies: `requirePositive` and `requireFiniteOutput`.
  */
 export function selectivityFactor(k1, k2) {
-    requirePositive('First retention factor', k1);
-    requirePositive('Second retention factor', k2);
-    const selectivity = Math.max(k1, k2) / Math.min(k1, k2);
-    requireFiniteOutput('Selectivity factor', selectivity);
-    return selectivity;
+  requirePositive("First retention factor", k1);
+  requirePositive("Second retention factor", k2);
+  const selectivity = Math.max(k1, k2) / Math.min(k1, k2);
+  requireFiniteOutput("Selectivity factor", selectivity);
+  return selectivity;
 }
 
 /**
@@ -34,18 +38,25 @@ export function selectivityFactor(k1, k2) {
  * Inputs: `retentionTime` and `width` are matching time units; `options.method` is sigma, fwhm, or baseline.
  * Dependencies: `requirePositive`, `requireFiniteOutput`.
  */
-export function theoreticalPlateCount(retentionTime, width, { method = 'sigma' } = {}) {
-    requirePositive('Retention time', retentionTime);
-    requirePositive('Peak width', width);
-    if (!['sigma', 'fwhm', 'baseline'].includes(method)) {
-        throw new RangeError('Plate-count method must be sigma, fwhm, or baseline.');
-    }
-    const ratioSquared = (retentionTime / width) ** 2;
-    const coefficient = method === 'sigma' ? 1 : method === 'fwhm' ? 5.545 : 16;
-    const plateCount = coefficient * ratioSquared;
-    requireFiniteOutput('Theoretical plate count', plateCount);
-    if (plateCount <= 0) throw new RangeError('Theoretical plate count must be positive.');
-    return plateCount;
+export function theoreticalPlateCount(
+  retentionTime,
+  width,
+  { method = "sigma" } = {},
+) {
+  requirePositive("Retention time", retentionTime);
+  requirePositive("Peak width", width);
+  if (!["sigma", "fwhm", "baseline"].includes(method)) {
+    throw new RangeError(
+      "Plate-count method must be sigma, fwhm, or baseline.",
+    );
+  }
+  const ratioSquared = (retentionTime / width) ** 2;
+  const coefficient = method === "sigma" ? 1 : method === "fwhm" ? 5.545 : 16;
+  const plateCount = coefficient * ratioSquared;
+  requireFiniteOutput("Theoretical plate count", plateCount);
+  if (plateCount <= 0)
+    throw new RangeError("Theoretical plate count must be positive.");
+  return plateCount;
 }
 
 /**
@@ -54,12 +65,12 @@ export function theoreticalPlateCount(retentionTime, width, { method = 'sigma' }
  * Dependencies: `requirePositive` and `requireFiniteOutput`.
  */
 export function plateHeight(columnLength, plateCount) {
-    requirePositive('Column length', columnLength);
-    requirePositive('Plate count', plateCount);
-    const height = columnLength / plateCount;
-    requireFiniteOutput('Plate height', height);
-    if (height <= 0) throw new RangeError('Plate height must be positive.');
-    return height;
+  requirePositive("Column length", columnLength);
+  requirePositive("Plate count", plateCount);
+  const height = columnLength / plateCount;
+  requireFiniteOutput("Plate height", height);
+  if (height <= 0) throw new RangeError("Plate height must be positive.");
+  return height;
 }
 
 /**
@@ -68,14 +79,15 @@ export function plateHeight(columnLength, plateCount) {
  * Dependencies: `requireFinite`, `requirePositive`, and `requireFiniteOutput`.
  */
 export function resolution(tr1, tr2, width1, width2) {
-    requireFinite('First retention time', tr1);
-    requireFinite('Second retention time', tr2);
-    requirePositive('First peak width', width1);
-    requirePositive('Second peak width', width2);
-    if (tr1 < 0 || tr2 < 0) throw new RangeError('Retention times must be non-negative.');
-    const value = Math.abs(tr2 - tr1) / (width1 / 2 + width2 / 2);
-    requireFiniteOutput('Resolution', value);
-    return value;
+  requireFinite("First retention time", tr1);
+  requireFinite("Second retention time", tr2);
+  requirePositive("First peak width", width1);
+  requirePositive("Second peak width", width2);
+  if (tr1 < 0 || tr2 < 0)
+    throw new RangeError("Retention times must be non-negative.");
+  const value = Math.abs(tr2 - tr1) / (width1 / 2 + width2 / 2);
+  requireFiniteOutput("Resolution", value);
+  return value;
 }
 
 /**
@@ -83,16 +95,21 @@ export function resolution(tr1, tr2, width1, width2) {
  * Inputs: `plateCount` is dimensionless, `selectivity` is alpha and must be at least 1, and `retentionFactor` is k > 0.
  * Dependencies: `requirePositive`, `requireFinite`, and `requireFiniteOutput`.
  */
-export function theoreticalResolution(plateCount, selectivity, retentionFactor) {
-    requirePositive('Plate count', plateCount);
-    requireFinite('Selectivity', selectivity);
-    requirePositive('Retention factor', retentionFactor);
-    if (selectivity < 1) throw new RangeError('Selectivity must be at least 1.');
-    const value = Math.sqrt(plateCount) / 4 *
-        ((selectivity - 1) / selectivity) *
-        (retentionFactor / (1 + retentionFactor));
-    requireFiniteOutput('Theoretical resolution', value);
-    return value;
+export function theoreticalResolution(
+  plateCount,
+  selectivity,
+  retentionFactor,
+) {
+  requirePositive("Plate count", plateCount);
+  requireFinite("Selectivity", selectivity);
+  requirePositive("Retention factor", retentionFactor);
+  if (selectivity < 1) throw new RangeError("Selectivity must be at least 1.");
+  const value =
+    (Math.sqrt(plateCount) / 4) *
+    ((selectivity - 1) / selectivity) *
+    (retentionFactor / (1 + retentionFactor));
+  requireFiniteOutput("Theoretical resolution", value);
+  return value;
 }
 
 /**
@@ -101,11 +118,11 @@ export function theoreticalResolution(plateCount, selectivity, retentionFactor) 
  * Dependencies: `requirePositive` and `requireFiniteOutput`.
  */
 export function tailingFactor(frontWidth, backWidth) {
-    requirePositive('Front width', frontWidth);
-    requirePositive('Back width', backWidth);
-    const value = 0.5 + (backWidth / 2) / frontWidth;
-    requireFiniteOutput('Tailing factor', value);
-    return value;
+  requirePositive("Front width", frontWidth);
+  requirePositive("Back width", backWidth);
+  const value = 0.5 + backWidth / 2 / frontWidth;
+  requireFiniteOutput("Tailing factor", value);
+  return value;
 }
 
 /**
@@ -114,11 +131,11 @@ export function tailingFactor(frontWidth, backWidth) {
  * Dependencies: `requirePositive` and `requireFiniteOutput`.
  */
 export function asymmetryFactor(frontWidth, backWidth) {
-    requirePositive('Front width', frontWidth);
-    requirePositive('Back width', backWidth);
-    const value = backWidth / frontWidth;
-    requireFiniteOutput('Asymmetry factor', value);
-    return value;
+  requirePositive("Front width", frontWidth);
+  requirePositive("Back width", backWidth);
+  const value = backWidth / frontWidth;
+  requireFiniteOutput("Asymmetry factor", value);
+  return value;
 }
 
 /**
@@ -127,12 +144,12 @@ export function asymmetryFactor(frontWidth, backWidth) {
  * Dependencies: `requireFinite`, `requirePositive`, and `requireFiniteOutput`.
  */
 export function signalToNoise(peakHeight, noiseStandardDeviation) {
-    requireFinite('Peak height', peakHeight);
-    requirePositive('Noise standard deviation', noiseStandardDeviation);
-    if (peakHeight < 0) throw new RangeError('Peak height must be non-negative.');
-    const value = peakHeight / noiseStandardDeviation;
-    requireFiniteOutput('Signal-to-noise ratio', value);
-    return value;
+  requireFinite("Peak height", peakHeight);
+  requirePositive("Noise standard deviation", noiseStandardDeviation);
+  if (peakHeight < 0) throw new RangeError("Peak height must be non-negative.");
+  const value = peakHeight / noiseStandardDeviation;
+  requireFiniteOutput("Signal-to-noise ratio", value);
+  return value;
 }
 
 /**
@@ -140,19 +157,25 @@ export function signalToNoise(peakHeight, noiseStandardDeviation) {
  * Inputs: `noiseStandardDeviation` is baseline noise, `calibrationSlope` is positive signal per concentration, and ratios are positive S/N thresholds.
  * Dependencies: `requirePositive` and `requireFiniteOutput`.
  */
-export function detectionLimits(noiseStandardDeviation, calibrationSlope,
-    { detectionRatio = 3, quantitationRatio = 10 } = {}) {
-    requirePositive('Noise standard deviation', noiseStandardDeviation);
-    requirePositive('Calibration slope', calibrationSlope);
-    requirePositive('Detection ratio', detectionRatio);
-    requirePositive('Quantitation ratio', quantitationRatio);
-    if (quantitationRatio < detectionRatio) {
-        throw new RangeError('Quantitation ratio must be at least the detection ratio.');
-    }
-    const lod = noiseStandardDeviation / calibrationSlope * detectionRatio;
-    const loq = noiseStandardDeviation / calibrationSlope * quantitationRatio;
-    requireFiniteOutput('Limit of detection', lod);
-    requireFiniteOutput('Limit of quantitation', loq);
-    if (lod <= 0 || loq <= 0) throw new RangeError('Detection limits are below the numeric range.');
-    return { lod, loq };
+export function detectionLimits(
+  noiseStandardDeviation,
+  calibrationSlope,
+  { detectionRatio = 3, quantitationRatio = 10 } = {},
+) {
+  requirePositive("Noise standard deviation", noiseStandardDeviation);
+  requirePositive("Calibration slope", calibrationSlope);
+  requirePositive("Detection ratio", detectionRatio);
+  requirePositive("Quantitation ratio", quantitationRatio);
+  if (quantitationRatio < detectionRatio) {
+    throw new RangeError(
+      "Quantitation ratio must be at least the detection ratio.",
+    );
+  }
+  const lod = (noiseStandardDeviation / calibrationSlope) * detectionRatio;
+  const loq = (noiseStandardDeviation / calibrationSlope) * quantitationRatio;
+  requireFiniteOutput("Limit of detection", lod);
+  requireFiniteOutput("Limit of quantitation", loq);
+  if (lod <= 0 || loq <= 0)
+    throw new RangeError("Detection limits are below the numeric range.");
+  return { lod, loq };
 }

@@ -10,9 +10,13 @@ export class ChromatographyGPU {
       : new Float32Array(gridSize);
 
     if (this.initialState.length !== gridSize) {
-      throw new RangeError(`Initial concentration must contain ${gridSize} values.`);
+      throw new RangeError(
+        `Initial concentration must contain ${gridSize} values.`,
+      );
     }
-    if (Array.from(this.initialState).some((value) => !Number.isFinite(value))) {
+    if (
+      Array.from(this.initialState).some((value) => !Number.isFinite(value))
+    ) {
       throw new RangeError("Initial concentration must contain finite values.");
     }
 
@@ -48,12 +52,12 @@ export class ChromatographyGPU {
 
     this.paramBuffer = this.device.createBuffer({
       size: 32,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     this.pipeline = this.device.createComputePipeline({
       layout: "auto",
-      compute: { module: shaderModule, entryPoint: "main" }
+      compute: { module: shaderModule, entryPoint: "main" },
     });
 
     this.bindGroupA = this.createBindGroup(this.bufferA, this.bufferB);
@@ -63,7 +67,10 @@ export class ChromatographyGPU {
   createStorageBuffer(size) {
     return this.device.createBuffer({
       size,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST,
     });
   }
 
@@ -73,8 +80,8 @@ export class ChromatographyGPU {
       entries: [
         { binding: 0, resource: { buffer: inputBuffer } },
         { binding: 1, resource: { buffer: outputBuffer } },
-        { binding: 2, resource: { buffer: this.paramBuffer } }
-      ]
+        { binding: 2, resource: { buffer: this.paramBuffer } },
+      ],
     });
   }
 
@@ -83,11 +90,22 @@ export class ChromatographyGPU {
     if (values.some((value) => !Number.isFinite(value))) {
       throw new TypeError("Simulation parameters must be finite numbers.");
     }
-    if (u <= 0 || dispersion < 0 || dt <= 0 || dz <= 0 ||
-        u * dt / dz + 2 * dispersion * dt / (dz * dz) > 1) {
-      throw new RangeError("Use positive SI grid steps satisfying u*dt/dz + 2*D*dt/dz² <= 1.");
+    if (
+      u <= 0 ||
+      dispersion < 0 ||
+      dt <= 0 ||
+      dz <= 0 ||
+      (u * dt) / dz + (2 * dispersion * dt) / (dz * dz) > 1
+    ) {
+      throw new RangeError(
+        "Use positive SI grid steps satisfying u*dt/dz + 2*D*dt/dz² <= 1.",
+      );
     }
-    if (Array.from(new Float32Array([u, dispersion, dt, dz])).some((value) => !Number.isFinite(value))) {
+    if (
+      Array.from(new Float32Array([u, dispersion, dt, dz])).some(
+        (value) => !Number.isFinite(value),
+      )
+    ) {
       throw new RangeError("Simulation parameters must fit in GPU f32 values.");
     }
     if (!this.device) {
@@ -125,7 +143,7 @@ export class ChromatographyGPU {
     const encoder = this.device.createCommandEncoder();
     const readBuffer = this.device.createBuffer({
       size: this.gridSize * Float32Array.BYTES_PER_ELEMENT,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     });
 
     encoder.copyBufferToBuffer(
@@ -133,12 +151,14 @@ export class ChromatographyGPU {
       0,
       readBuffer,
       0,
-      this.gridSize * Float32Array.BYTES_PER_ELEMENT
+      this.gridSize * Float32Array.BYTES_PER_ELEMENT,
     );
     this.device.queue.submit([encoder.finish()]);
     await this.device.queue.onSubmittedWorkDone();
     await readBuffer.mapAsync(GPUMapMode.READ);
-    const concentration = new Float32Array(readBuffer.getMappedRange().slice(0));
+    const concentration = new Float32Array(
+      readBuffer.getMappedRange().slice(0),
+    );
     readBuffer.unmap();
     readBuffer.destroy();
     return concentration;
@@ -149,7 +169,9 @@ export class ChromatographyGPU {
       throw new Error("The WebGPU simulation has not been initialized.");
     }
     if (initialConcentration.length !== this.gridSize) {
-      throw new RangeError(`Initial concentration must contain ${this.gridSize} values.`);
+      throw new RangeError(
+        `Initial concentration must contain ${this.gridSize} values.`,
+      );
     }
     const nextState = new Float32Array(initialConcentration);
     if (Array.from(nextState).some((value) => !Number.isFinite(value))) {
@@ -158,7 +180,11 @@ export class ChromatographyGPU {
 
     this.initialState = nextState;
     this.device.queue.writeBuffer(this.bufferA, 0, this.initialState);
-    this.device.queue.writeBuffer(this.bufferB, 0, new Float32Array(this.gridSize));
+    this.device.queue.writeBuffer(
+      this.bufferB,
+      0,
+      new Float32Array(this.gridSize),
+    );
     this.isEvenFrame = true;
   }
 
