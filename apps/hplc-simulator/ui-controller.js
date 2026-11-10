@@ -459,7 +459,7 @@ export class UIController {
         1e-6
       ).toFixed(2);
     } catch {
-      document.getElementById("flowOutput").value = "â€”";
+      document.getElementById("flowOutput").value = "—";
     }
   }
 
